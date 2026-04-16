@@ -10,6 +10,11 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#070810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lottery Lab">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -484,6 +489,44 @@ body.light .pattern-sum { background: #fff8e1; }
         <div class="card-title">🔮 ทำนายงวดถัดไปอัตโนมัติ</div>
         <p style="font-size:0.75rem;color:var(--muted);margin-bottom:8px">ใช้ความรู้ทั้งหมดจาก backtest</p>
         <div id="btNextPred" style="font-size:0.85rem;color:var(--text2);line-height:1.9"></div>
+      </div>
+
+      <!-- Method Comparison -->
+      <div class="card">
+        <div class="card-title">⚔️ เปรียบเทียบทุกวิธี (Method Comparison)</div>
+        <p style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">รันทุกวิธีทำนายบนข้อมูลเดียวกัน เปรียบเทียบ accuracy</p>
+        <label>ประเภทรางวัล</label>
+        <select id="mcType">
+          <option value="last2">เลขท้าย 2 ตัว</option>
+          <option value="last3">เลขท้าย 3 ตัว (จาก 6 หลัก)</option>
+          <option value="first3">เลขหน้า 3 ตัว (จาก 6 หลัก)</option>
+        </select>
+        <label>ท็อป N</label>
+        <select id="mcTopN">
+          <option value="1">1 ตัว</option>
+          <option value="3">3 ตัว</option>
+          <option value="5" selected>5 ตัว</option>
+          <option value="10">10 ตัว</option>
+        </select>
+        <button class="btn purple-btn" id="mcBtn" onclick="runMethodComparison()">⚔️ เปรียบเทียบทุกวิธี</button>
+      </div>
+
+      <div id="mcResultArea" style="display:none">
+        <div class="card">
+          <div class="card-title">📊 ผลเปรียบเทียบ</div>
+          <div id="mcSummary" style="font-size:0.82rem;line-height:1.9;color:var(--text2)"></div>
+          <div class="chart-container" style="height:280px"><canvas id="chartMcCompare"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">📈 Accuracy รายงวด แต่ละวิธี</div>
+          <p style="font-size:0.72rem;color:var(--muted);margin-bottom:4px">เส้นสูง = ดีกว่า</p>
+          <div class="chart-container" style="height:280px"><canvas id="chartMcDetail"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">🏆 Rank Distribution</div>
+          <p style="font-size:0.72rem;color:var(--muted);margin-bottom:4px">เลขจริงอยู่อันดับที่เท่าไหร่ในแต่ละวิธี (ยิ่งต่ำยิ่งดี)</p>
+          <div class="chart-container" style="height:280px"><canvas id="chartMcRank"></canvas></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1388,9 +1431,19 @@ ${dataStr || '(ไม่มีข้อมูล)'}
         const typeLabels2 = {'1st':'รางวัลที่ 1','3f':'หน้า 3 ตัว','3b':'ท้าย 3 ตัว','2':'ท้าย 2 ตัว'};
         analysis += `▸ ${typeLabels2[k]}:\n`;
 
-        // Top 5 predictions
+        // Top 5 predictions with confidence
         if (a.top5?.length && method !== 'random') {
-          analysis += `  Top 5: ${a.top5.map((p,i) => `${i+1}.${p.str}`).join(' | ')}\n`;
+          const topScore = a.top5[0]?.score || 1;
+          analysis += `  Top 5:\n`;
+          a.top5.forEach((p, i) => {
+            const conf = topScore > 0 ? ((p.score / topScore) * 100).toFixed(1) : '0.0';
+            const bar = '█'.repeat(Math.round(parseFloat(conf) / 10)) + '░'.repeat(10 - Math.round(parseFloat(conf) / 10));
+            const prob = (100 / Math.pow(10, p.str.length)).toFixed(4);
+            analysis += `    ${i+1}. ${p.str}  —  ${conf}% relative | P(random)=${prob}%\n`;
+            if (method === 'ensemble' && p.w !== undefined) {
+              analysis += `       W:${p.w?.toFixed(1)} M:${p.m?.toFixed(1)} E:${p.e?.toFixed(1)} G:${p.g?.toFixed(1)}\n`;
+            }
+          });
         }
 
         // Overdue digits
@@ -1401,19 +1454,17 @@ ${dataStr || '(ไม่มีข้อมูล)'}
 
         // Transition info
         if (a.transInfo) analysis += `  🔗 ${a.transInfo}\n`;
-
-        // Ensemble breakdown
-        if (method === 'ensemble' && a.top5?.[0]?.w !== undefined) {
-          const best = a.top5[0];
-          analysis += `  📐 Breakdown: W=${best.w?.toFixed(1)} M=${best.m?.toFixed(1)} E=${best.e?.toFixed(1)} G=${best.g?.toFixed(1)}\n`;
-        }
         analysis += '\n';
       });
     }
 
     analysis += '═'.repeat(36) + '\n';
     analysis += '🎯 ผลทำนาย:\n';
-    selected.forEach(k => { analysis += `  ${{'1st':'รางวัลที่ 1','3f':'หน้า 3 ตัว','3b':'ท้าย 3 ตัว','2':'ท้าย 2 ตัว'}[k]}: ${preds[k]}\n`; });
+    selected.forEach(k => {
+      const nd = preds[k]?.length || 0;
+      const randProb = (100 / Math.pow(10, nd)).toFixed(4);
+      analysis += `  ${{'1st':'รางวัลที่ 1','3f':'หน้า 3 ตัว','3b':'ท้าย 3 ตัว','2':'ท้าย 2 ตัว'}[k]}: ${preds[k]}  (P(random)=${randProb}%)\n`;
+    });
 
     if (method === 'random') {
       analysis += '\n🎲 กลุ่มควบคุม — สุ่มล้วน ไม่ใช้สถิติ';
@@ -2028,6 +2079,194 @@ function runSmartBacktest() {
   toast('✅ Smart Backtest เสร็จแล้ว!');
 }
 
+// ========== METHOD COMPARISON ==========
+const MC_METHODS = ['ensemble', 'weighted', 'markov', 'entropy', 'gap', 'hotcold', 'streak', 'random'];
+const MC_COLORS = ['#e8b84b', '#ff3d5a', '#4d9fff', '#2ecc98', '#a855f7', '#ff884d', '#00ccdd', '#888888'];
+const MC_NAMES = { ensemble: 'Ensemble', weighted: 'Weighted', markov: 'Markov', entropy: 'Entropy', gap: 'Gap', hotcold: 'Hot/Cold', streak: 'Position', random: 'Random' };
+
+function runMethodComparison() {
+  const d = getData();
+  if (!d.first?.length || d.first.length < 10) { toast('⚠️ ต้องมีข้อมูลอย่างน้อย 10 งวด'); return; }
+
+  const type = document.getElementById('mcType').value;
+  const topN = parseInt(document.getElementById('mcTopN').value);
+  const btn = document.getElementById('mcBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>กำลังรันทุกวิธี...';
+
+  // Prepare data
+  let actualNumbers = [];
+  if (type === 'last2' && d.two?.length >= 10) actualNumbers = d.two.slice(0, Math.min(d.two.length, 80));
+  else if (type === 'last3') actualNumbers = d.first.slice(0, 80).map(n => n.slice(-3));
+  else if (type === 'first3') actualNumbers = d.first.slice(0, 80).map(n => n.slice(0, 3));
+  else actualNumbers = d.first.slice(0, 80).map(n => n.slice(-3));
+
+  const numDigits = actualNumbers[0]?.length || 2;
+  const totalDraws = actualNumbers.length;
+  const randomExpected = Math.pow(10, numDigits);
+
+  // For each method, run backtest
+  const methodResults = {};
+
+  MC_METHODS.forEach(method => {
+    const brain = new LotteryBrain(numDigits);
+    // Feed first 5
+    for (let i = 0; i < 5 && i < totalDraws; i++) brain.learn(actualNumbers[i]);
+
+    const results = [];
+    for (let drawIdx = 5; drawIdx < totalDraws; drawIdx++) {
+      const actual = actualNumbers[drawIdx];
+      const ranked = brain.scoreAll();
+      const rank = ranked.findIndex(r => r.str === actual) + 1;
+      const hitInTopN = ranked.slice(0, topN).some(r => r.str === actual);
+
+      results.push({ drawIdx, actual, rank, hitInTopN });
+      brain.learn(actual);
+    }
+
+    const topNHits = results.filter(r => r.hitInTopN).length;
+    const topNRate = ((topNHits / results.length) * 100).toFixed(1);
+    const avgRank = (results.reduce((s, r) => s + r.rank, 0) / results.length).toFixed(1);
+    const medianRank = results.map(r => r.rank).sort((a, b) => a - b)[Math.floor(results.length / 2)];
+
+    methodResults[method] = { results, topNHits, topNRate, avgRank, medianRank };
+  });
+
+  // === Render Summary ===
+  const typeLabels = { last2: 'เลขท้าย 2 ตัว', last3: 'เลขท้าย 3 ตัว', first3: 'เลขหน้า 3 ตัว' };
+  const rankedMethods = Object.entries(methodResults).sort((a, b) => parseFloat(b[1].topNRate) - parseFloat(a[1].topNRate));
+  const best = rankedMethods[0];
+
+  let summaryHTML = `
+    <div style="background:linear-gradient(135deg,#0a0f12,#0d1020);border:1px solid #1e3040;border-radius:12px;padding:16px;margin-bottom:12px;text-align:center">
+      <div style="font-size:0.7rem;color:var(--muted)">🏆 วิธีที่ดีที่สุด (Top-${topN})</div>
+      <div style="font-size:1.8rem;font-weight:700;color:var(--gold)">${MC_NAMES[best[0]]}</div>
+      <div style="font-size:1.4rem;font-family:'Share Tech Mono',monospace;color:var(--green)">${best[1].topNRate}%</div>
+      <div style="font-size:0.65rem;color:var(--muted)">Random baseline: ${(topN * 100 / randomExpected).toFixed(1)}%</div>
+    </div>
+    ประเภท: <strong style="color:var(--gold)">${typeLabels[type]}</strong> | Top-${topN} | ${results.length} งวด<br><br>
+  `;
+
+  summaryHTML += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">`;
+  rankedMethods.forEach(([m, r], i) => {
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+    summaryHTML += `
+      <div style="text-align:center;background:var(--s3);border-radius:8px;padding:8px 4px;${i<3?'border:1px solid '+MC_COLORS[MC_METHODS.indexOf(m)]+'44':''}">
+        <div style="font-size:0.55rem;color:var(--muted)">${medal} ${MC_NAMES[m]}</div>
+        <div style="font-size:1rem;font-weight:700;font-family:'Share Tech Mono',monospace;color:${parseFloat(r.topNRate)>(topN*100/randomExpected)?'var(--green)':'var(--muted)'}">${r.topNRate}%</div>
+        <div style="font-size:0.55rem;color:var(--muted)">AvgRank: ${r.avgRank}</div>
+      </div>
+    `;
+  });
+  summaryHTML += `</div>`;
+  document.getElementById('mcSummary').innerHTML = summaryHTML;
+
+  // === Bar chart comparison ===
+  const c = getChartColors();
+  destroyChart('mcCompare');
+  charts.mcCompare = new Chart(document.getElementById('chartMcCompare'), {
+    type: 'bar',
+    data: {
+      labels: rankedMethods.map(([m]) => MC_NAMES[m]),
+      datasets: [{
+        label: `Top-${topN} Hit Rate %`,
+        data: rankedMethods.map(([, r]) => r.topNRate),
+        backgroundColor: rankedMethods.map(([m]) => MC_COLORS[MC_METHODS.indexOf(m)] + '88'),
+        borderColor: rankedMethods.map(([m]) => MC_COLORS[MC_METHODS.indexOf(m)]),
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: c.text, callback: v => v + '%' }, grid: { color: c.grid }, min: 0 },
+        y: { ticks: { color: c.text }, grid: { color: c.grid } }
+      }
+    }
+  });
+
+  // === Rolling accuracy chart ===
+  destroyChart('mcDetail');
+  const windowSize = Math.max(5, Math.floor(totalDraws / 8));
+  const lineLabels = [];
+  const datasets = [];
+
+  MC_METHODS.forEach((method, mi) => {
+    const res = methodResults[method].results;
+    const rolling = [];
+    for (let i = 0; i < res.length; i += windowSize) {
+      const w = res.slice(i, i + windowSize);
+      const hits = w.filter(r => r.hitInTopN).length;
+      rolling.push(((hits / w.length) * 100).toFixed(1));
+      if (mi === 0) lineLabels.push(`#${res[i].drawIdx}-${res[Math.min(i + windowSize - 1, res.length - 1)].drawIdx}`);
+    }
+    datasets.push({
+      label: MC_NAMES[method],
+      data: rolling,
+      borderColor: MC_COLORS[mi],
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      tension: 0.3,
+      pointRadius: 3
+    });
+  });
+
+  charts.mcDetail = new Chart(document.getElementById('chartMcDetail'), {
+    type: 'line',
+    data: { labels: lineLabels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: c.text, font: { size: 10 } } } },
+      scales: {
+        y: { ticks: { color: c.text, callback: v => v + '%' }, grid: { color: c.grid } },
+        x: { ticks: { color: c.text }, grid: { color: c.grid } }
+      }
+    }
+  });
+
+  // === Rank distribution chart ===
+  destroyChart('mcRank');
+  const rankLabels = ['1', '2-5', '6-10', '11-50', '51-100', '100+'];
+  const rankBuckets = MC_METHODS.map(() => rankLabels.map(() => 0));
+
+  MC_METHODS.forEach((method, mi) => {
+    methodResults[method].results.forEach(r => {
+      if (r.rank === 1) rankBuckets[mi][0]++;
+      else if (r.rank <= 5) rankBuckets[mi][1]++;
+      else if (r.rank <= 10) rankBuckets[mi][2]++;
+      else if (r.rank <= 50) rankBuckets[mi][3]++;
+      else if (r.rank <= 100) rankBuckets[mi][4]++;
+      else rankBuckets[mi][5]++;
+    });
+  });
+
+  charts.mcRank = new Chart(document.getElementById('chartMcRank'), {
+    type: 'bar',
+    data: {
+      labels: rankLabels,
+      datasets: MC_METHODS.map((method, mi) => ({
+        label: MC_NAMES[method],
+        data: rankBuckets[mi],
+        backgroundColor: MC_COLORS[mi] + '88',
+        borderColor: MC_COLORS[mi],
+        borderWidth: 1
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: c.text, font: { size: 9 } } } },
+      scales: {
+        y: { ticks: { color: c.text }, grid: { color: c.grid }, stacked: false },
+        x: { ticks: { color: c.text }, grid: { color: c.grid } }
+      }
+    }
+  });
+
+  document.getElementById('mcResultArea').style.display = 'block';
+  btn.disabled = false; btn.innerHTML = '⚔️ เปรียบเทียบทุกวิธี';
+  toast('✅ เปรียบเทียบเสร็จแล้ว!');
+}
+
 // ========== INIT ==========
 (function init() {
   // Migrate from old versions
@@ -2035,6 +2274,11 @@ function runSmartBacktest() {
   ['llpreds_v3','llpreds_v2','llpreds'].forEach(k => { if (localStorage.getItem(k) && !localStorage.getItem(SK.preds)) { setPreds(JSON.parse(localStorage.getItem(k))); }});
   const d = getData();
   if (d.first?.length || d.three?.length || d.two?.length) updateDataUI(d);
+
+  // Register Service Worker (PWA)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
 })();
 </script>
 </body>
