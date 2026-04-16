@@ -1250,28 +1250,33 @@ function runBacktest() {
   const typeLabels = { last2: 'เลขท้าย 2 ตัว', last3: 'เลขท้าย 3 ตัว', first3: 'เลขหน้า 3 ตัว' };
   const methodLabels = { weighted: '📊 Weighted', hotcold: '🔥 Hot/Cold', streak: '📈 Streak', random: '🎲 Random' };
 
+  // Random baseline
+  const randomExpected = numDigits === 2 ? 100 : 1000;
+
   document.getElementById('btSummary').innerHTML = `
-    <div class="scoreboard" style="margin-bottom:12px">
-      <div class="score-val" style="font-size:2rem">${maxAttempts === 999 ? avgAttempts.toFixed(0) : hitRate + '%'}</div>
-      <div class="score-sub">${maxAttempts === 999 ? 'เฉลี่ยพยายามกี่ครั้งถึงถูก' : 'Hit Rate'}</div>
+    <div style="background:linear-gradient(135deg,#0a0f12,#0d1020);border:1px solid #1e3040;border-radius:12px;padding:16px;margin-bottom:12px;text-align:center">
+      <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">เฉลี่ยสุ่มกี่ครั้งถึงจะถูก</div>
+      <div style="font-size:2.8rem;font-weight:700;font-family:'Share Tech Mono',monospace;color:${avgAttempts < randomExpected ? 'var(--green)' : 'var(--red)'}">${avgAttempts.toFixed(0)}</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:4px">ครั้ง | Random baseline = ${randomExpected} ครั้ง</div>
+      <div style="background:var(--s3);border-radius:20px;height:10px;margin:12px 20px 4px;overflow:hidden">
+        <div style="height:100%;width:${Math.min((randomExpected/avgAttempts)*50, 100)}%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:20px"></div>
+      </div>
+      <div style="font-size:0.65rem;color:var(--muted)">${avgAttempts < randomExpected ? `ดีกว่า random ${((1-avgAttempts/randomExpected)*100).toFixed(1)}%` : 'ไม่ดีกว่า random'}</div>
     </div>
-    ประเภท: <strong style="color:var(--gold)">${typeLabels[type]}</strong> (${numDigits} หลัก)<br>
-    วิธี: <strong>${methodLabels[method]}</strong><br>
-    งวดที่ทดสอบ: <strong>${totalDraws} งวด</strong><br>
-    ${maxAttempts === 999 ? `
-      เฉลี่ย attempts จนถูก: <strong style="color:var(--green)">${avgAttempts.toFixed(1)}</strong> ครั้ง<br>
-      น้อยสุด: ${minAttemptsUsed} | มากสุด: ${maxAttemptsUsed} | มัธยฐาน: ${medianAttempts}<br>
-      <span style="color:var(--muted)">Expected (pure random): ${expectedRandomAttempts} ครั้ง</span><br>
-      ${avgAttempts < expectedRandomAttempts
-        ? `<span style="color:var(--green)">✅ ดีกว่า random ${((1 - avgAttempts/expectedRandomAttempts)*100).toFixed(1)}%</span>`
-        : `<span style="color:var(--red)">❌ ไม่ดีกว่า random</span>`}
-    ` : `
-      ถูก: <strong style="color:var(--green)">${hits}/${totalDraws}</strong> งวด<br>
-      Expected (pure random): ~${(randomProb * 100 * totalDraws).toFixed(1)} งวด<br>
-      ${hits > randomProb * totalDraws
-        ? `<span style="color:var(--green)">✅ ดีกว่าที่คาดจาก random</span>`
-        : `<span style="color:var(--muted)">📌 สอดคล้องกับ random (ไม่ดีกว่า)</span>`}
-    `}
+    ประเภท: <strong style="color:var(--gold)">${typeLabels[type]}</strong> (${numDigits} หลัก | 1:${numDigits===2?100:1000})<br>
+    วิธี: <strong>${methodLabels[method]}</strong> | งวดที่ทดสอบ: <strong>${totalDraws}</strong><br>
+    <br>
+    <span style="font-size:0.78rem">
+    น้อยสุด: <strong style="color:var(--green)">${minAttemptsUsed}</strong> ครั้ง<br>
+    มัธยฐาน: <strong style="color:var(--gold)">${medianAttempts}</strong> ครั้ง<br>
+    เฉลี่ย: <strong>${avgAttempts.toFixed(1)}</strong> ครั้ง<br>
+    มากสุด: <strong style="color:var(--red)">${maxAttemptsUsed}</strong> ครั้ง<br>
+    </span>
+    <br>
+    <span style="font-size:0.7rem;color:var(--muted)">
+    📌 ถ้าเฉลี่ย ≈ ${randomExpected} = ไม่ดีกว่าสุ่มมั่ว<br>
+    ถ้าเฉลี่ย < ${randomExpected} = วิธีนี้จับ pattern ได้บ้าง (แต่หวยจริงสุ่ม 100% นะ)
+    </span>
   `;
 
   // Hit rate chart
@@ -1426,11 +1431,30 @@ function runComparison(actualNumbers, numDigits, c) {
   });
 
   const expectedRandom = numDigits === 2 ? 100 : 1000;
-  document.getElementById('btCompareSummary').innerHTML = methods.map((m, i) => {
-    const avg = avgByMethod[i];
-    const better = avg < expectedRandom;
-    return `<div style="margin:4px 0">${methodLabels[m]}: <strong style="color:${better ? 'var(--green)' : 'var(--red)'}">${avg.toFixed(1)}</strong> attempts ${better ? '✅' : '≈ random'}</div>`;
-  }).join('') + `<div style="margin-top:6px;font-size:0.7rem;color:var(--muted)">Expected random: ${expectedRandom} attempts | งวดที่ทดสอบ: ${comparison[methods[0]].attempts.length}</div>`;
+  document.getElementById('btCompareSummary').innerHTML =
+    `<div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:8px">
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px">📊 เปรียบเทียบทุกวิธี (น้อย = ดีกว่า)</div>
+      ${methods.map((m, i) => {
+        const avg = avgByMethod[i];
+        const pctOfRandom = ((avg / expectedRandom) * 100).toFixed(0);
+        const barColor = avg < expectedRandom * 0.8 ? 'var(--green)' : avg < expectedRandom ? 'var(--gold)' : 'var(--red)';
+        return `<div style="margin:6px 0">
+          <div style="display:flex;justify-content:space-between;font-size:0.78rem">
+            <span>${methodLabels[m]}</span>
+            <span style="font-family:'Share Tech Mono',monospace;color:${barColor}">${avg.toFixed(1)} ครั้ง (${pctOfRandom}% ของ random)</span>
+          </div>
+          <div style="background:var(--s3);border-radius:4px;height:6px;overflow:hidden;margin-top:3px">
+            <div style="height:100%;width:${Math.min(pctOfRandom, 100)}%;background:${barColor};border-radius:4px;transition:width 0.5s"></div>
+          </div>
+        </div>`;
+      }).join('')}
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:0.72rem;color:var(--muted)">
+        🎯 Random baseline: ${expectedRandom} ครั้ง | งวดทดสอบ: ${comparison[methods[0]].attempts.length}<br>
+        ${avgByMethod.every(a => a >= expectedRandom * 0.95)
+          ? '⚠️ ทุกวิธีได้ผลใกล้เคียง random = ไม่มีวิธีไหนจับ pattern ได้จริง'
+          : '✅ มีวิธีที่ดีกว่า random — แต่หวยจริงยังสุ่ม 100% นะ'}
+      </div>
+    </div>`;
 }
 
 // ========== INIT ==========
