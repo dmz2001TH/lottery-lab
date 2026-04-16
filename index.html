@@ -52,8 +52,8 @@ body::before {
 body.light .warn { background: #fff5f5; color: #8b3a3a; border-color: #ffcccc; }
 
 /* Tabs */
-.tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 18px; background: var(--s1); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
-.tab { padding: 8px 2px; border-radius: 7px; border: none; background: transparent; color: var(--muted); font-family: 'Sarabun', sans-serif; font-size: 0.65rem; cursor: pointer; transition: all 0.2s; text-align: center; line-height: 1.3; }
+.tabs { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 18px; background: var(--s1); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.tab { padding: 8px 2px; border-radius: 7px; border: none; background: transparent; color: var(--muted); font-family: 'Sarabun', sans-serif; font-size: 0.6rem; cursor: pointer; transition: all 0.2s; text-align: center; line-height: 1.3; }
 .tab.active { background: var(--s3); color: var(--gold); border: 1px solid var(--border); }
 
 /* Panel */
@@ -203,6 +203,7 @@ body.light .pattern-sum { background: #fff8e1; }
   <button class="tab" onclick="go('pattern')">🧬<br>Pattern</button>
   <button class="tab" onclick="go('predict')">🔮<br>ทำนาย</button>
   <button class="tab" onclick="go('track')">📋<br>บันทึก</button>
+  <button class="tab" onclick="go('backtest')">🔬<br>Backtest</button>
   <button class="tab" onclick="go('export')">📤<br>ส่งออก</button>
 </div>
 
@@ -394,6 +395,76 @@ body.light .pattern-sum { background: #fff8e1; }
   </div>
 </div>
 
+<!-- ===== BACKTEST TAB ===== -->
+<div id="panel-backtest" class="panel">
+  <div id="btEmpty" class="card"><div class="empty">ต้องมีข้อมูลรางวัลที่ 1 อย่างน้อย 10 งวด<br>ไปแท็บ "ข้อมูล" ป้อนผลหวยก่อนครับ</div></div>
+  <div id="btMain" style="display:none">
+    <div class="card">
+      <div class="card-title">🔬 Backtest — วิเคราะห์ย้อนหลัง</div>
+      <p style="font-size:0.75rem;color:var(--text2);line-height:1.7;margin-bottom:12px">
+        ระบบจะจำลองทำนายย้อนหลังทีละงวด แล้วเทียบกับผลจริง<br>
+        <strong>วิธีการทำงาน:</strong> เก็บงวดแรกเป็นฐาน → ทำนายงวดถัดไป → เทียบผล → เพิ่มงวด → ทำซ้ำ
+      </p>
+
+      <label>รางวัลที่ต้องการ Backtest</label>
+      <select id="btType">
+        <option value="last2">เลขท้าย 2 ตัว</option>
+        <option value="last3">เลขท้าย 3 ตัว (รางวัลที่ 1)</option>
+        <option value="first3">เลขหน้า 3 ตัว (รางวัลที่ 1)</option>
+      </select>
+
+      <label>วิธีทำนาย</label>
+      <select id="btMethod">
+        <option value="weighted">📊 Weighted Frequency</option>
+        <option value="hotcold">🔥 Hot/Cold Mix</option>
+        <option value="streak">📈 Position Streak</option>
+        <option value="random">🎲 Pure Random</option>
+      </select>
+
+      <label>จำนวนรอบต่องวด (เพิ่มโอกาสถูก)</label>
+      <select id="btAttempts">
+        <option value="1">1 ครั้ง (ปกติ)</option>
+        <option value="5">5 ครั้ง</option>
+        <option value="10" selected>10 ครั้ง</option>
+        <option value="50">50 ครั้ง</option>
+        <option value="100">100 ครั้ง</option>
+        <option value="999">สุ่มจนกว่าจะถูก</option>
+      </select>
+
+      <button class="btn" id="btBtn" onclick="runBacktest()">🔬 เริ่ม Backtest</button>
+    </div>
+
+    <div id="btResultArea" style="display:none">
+      <div class="card">
+        <div class="card-title">📊 ผล Backtest — Summary</div>
+        <div id="btSummary" style="font-size:0.82rem;line-height:1.9;color:var(--text2)"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📈 Hit Rate per Draw</div>
+        <div class="chart-container" style="height:250px"><canvas id="chartBtHit"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎯 Attempts Until Hit (งวดที่ถูก)</div>
+        <div class="chart-container" style="height:250px"><canvas id="chartBtAttempts"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📋 รายละเอียดแต่ละงวด</div>
+        <div id="btDetails" style="font-size:0.78rem;line-height:1.7;color:var(--text2);max-height:400px;overflow-y:auto"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🔍 เทียบวิธีทำนายทั้งหมด</div>
+        <p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px">รันทุกวิธีพร้อมกันเพื่อดูว่าวิธีไหนดีสุด</p>
+        <div class="chart-container" style="height:280px"><canvas id="chartBtCompare"></canvas></div>
+        <div id="btCompareSummary" style="font-size:0.82rem;line-height:1.9;color:var(--text2);margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== EXPORT TAB ===== -->
 <div id="panel-export" class="panel">
   <div class="card">
@@ -481,7 +552,7 @@ function toggleTheme() {
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
 
 // ========== NAV ==========
-const TABS = ['data','stats','pattern','predict','track','export'];
+const TABS = ['data','stats','pattern','predict','track','backtest','export'];
 function go(t) {
   document.querySelectorAll('.tab').forEach((el,i) => el.classList.toggle('active', TABS[i] === t));
   document.querySelectorAll('.panel').forEach((el,i) => el.classList.toggle('active', `panel-${TABS[i]}` === `panel-${t}`));
@@ -1102,6 +1173,264 @@ function quickSetup() {
   loadSampleData();
   toast('✅ โหลดตัวอย่าง 100 งวดแล้ว! กำลังพาไปหน้าสถิติ...');
   setTimeout(() => go('stats'), 500);
+}
+
+// ========== BACKTEST ==========
+function runBacktest() {
+  const d = getData();
+  if (!d.first?.length || d.first.length < 10) { toast('⚠️ ต้องมีข้อมูลอย่างน้อย 10 งวด'); return; }
+
+  const type = document.getElementById('btType').value;
+  const method = document.getElementById('btMethod').value;
+  const maxAttempts = parseInt(document.getElementById('btAttempts').value);
+
+  const btn = document.getElementById('btBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>กำลังวิเคราะห์...';
+
+  // Prepare data based on type
+  let actualNumbers = [];
+  if (type === 'last2' && d.two?.length >= 10) {
+    actualNumbers = d.two.slice(0, Math.min(d.two.length, d.first.length));
+  } else if (type === 'last3') {
+    actualNumbers = d.first.slice(0, Math.min(d.first.length, d.two?.length || 999)).map(n => n.slice(-3));
+  } else if (type === 'first3') {
+    actualNumbers = d.first.slice(0, Math.min(d.first.length, d.two?.length || 999)).map(n => n.slice(0, 3));
+  } else {
+    // Fallback: use last3 from first prize
+    actualNumbers = d.first.map(n => n.slice(-3));
+  }
+
+  const numDigits = actualNumbers[0]?.length || 2;
+  const results = [];
+
+  // Run backtest: for each draw, use previous draws as data, predict next
+  for (let drawIdx = 5; drawIdx < actualNumbers.length; drawIdx++) {
+    const history = actualNumbers.slice(0, drawIdx);
+    const actual = actualNumbers[drawIdx];
+    let hit = false;
+    let hitAttempt = maxAttempts === 999 ? 0 : maxAttempts;
+    const predictions = [];
+
+    for (let att = 0; att < (maxAttempts === 999 ? 10000 : maxAttempts); att++) {
+      const pred = generateSinglePrediction(method, history, numDigits);
+      predictions.push(pred);
+      if (pred === actual) {
+        hit = true;
+        hitAttempt = att + 1;
+        break;
+      }
+    }
+
+    if (maxAttempts === 999 && !hit) hitAttempt = 10000;
+
+    results.push({
+      drawIdx,
+      actual,
+      hit: maxAttempts === 999 ? true : hit,
+      hitAttempt,
+      attempts: maxAttempts === 999 ? hitAttempt : maxAttempts,
+      predictions: predictions.slice(0, 5) // keep first 5 for display
+    });
+  }
+
+  // Calculate stats
+  const totalDraws = results.length;
+  const hits = results.filter(r => r.hit).length;
+  const hitRate = ((hits / totalDraws) * 100).toFixed(2);
+  const avgAttempts = results.reduce((s, r) => s + r.hitAttempt, 0) / totalDraws;
+  const maxAttemptsUsed = Math.max(...results.map(r => r.hitAttempt));
+  const minAttemptsUsed = Math.min(...results.map(r => r.hitAttempt));
+  const medianAttempts = results.map(r => r.hitAttempt).sort((a, b) => a - b)[Math.floor(results.length / 2)];
+
+  // Expected random
+  const randomProb = numDigits === 2 ? 1/100 : 1/1000;
+  const expectedRandomAttempts = Math.round(1 / randomProb);
+
+  // Summary
+  const typeLabels = { last2: 'เลขท้าย 2 ตัว', last3: 'เลขท้าย 3 ตัว', first3: 'เลขหน้า 3 ตัว' };
+  const methodLabels = { weighted: '📊 Weighted', hotcold: '🔥 Hot/Cold', streak: '📈 Streak', random: '🎲 Random' };
+
+  document.getElementById('btSummary').innerHTML = `
+    <div class="scoreboard" style="margin-bottom:12px">
+      <div class="score-val" style="font-size:2rem">${maxAttempts === 999 ? avgAttempts.toFixed(0) : hitRate + '%'}</div>
+      <div class="score-sub">${maxAttempts === 999 ? 'เฉลี่ยพยายามกี่ครั้งถึงถูก' : 'Hit Rate'}</div>
+    </div>
+    ประเภท: <strong style="color:var(--gold)">${typeLabels[type]}</strong> (${numDigits} หลัก)<br>
+    วิธี: <strong>${methodLabels[method]}</strong><br>
+    งวดที่ทดสอบ: <strong>${totalDraws} งวด</strong><br>
+    ${maxAttempts === 999 ? `
+      เฉลี่ย attempts จนถูก: <strong style="color:var(--green)">${avgAttempts.toFixed(1)}</strong> ครั้ง<br>
+      น้อยสุด: ${minAttemptsUsed} | มากสุด: ${maxAttemptsUsed} | มัธยฐาน: ${medianAttempts}<br>
+      <span style="color:var(--muted)">Expected (pure random): ${expectedRandomAttempts} ครั้ง</span><br>
+      ${avgAttempts < expectedRandomAttempts
+        ? `<span style="color:var(--green)">✅ ดีกว่า random ${((1 - avgAttempts/expectedRandomAttempts)*100).toFixed(1)}%</span>`
+        : `<span style="color:var(--red)">❌ ไม่ดีกว่า random</span>`}
+    ` : `
+      ถูก: <strong style="color:var(--green)">${hits}/${totalDraws}</strong> งวด<br>
+      Expected (pure random): ~${(randomProb * 100 * totalDraws).toFixed(1)} งวด<br>
+      ${hits > randomProb * totalDraws
+        ? `<span style="color:var(--green)">✅ ดีกว่าที่คาดจาก random</span>`
+        : `<span style="color:var(--muted)">📌 สอดคล้องกับ random (ไม่ดีกว่า)</span>`}
+    `}
+  `;
+
+  // Hit rate chart
+  const c = getChartColors();
+  destroyChart('btHit');
+  const hitRatePerWindow = [];
+  const windowSize = 10;
+  for (let i = 0; i < results.length; i += windowSize) {
+    const window = results.slice(i, i + windowSize);
+    const wHits = window.filter(r => r.hit).length;
+    hitRatePerWindow.push(((wHits / window.length) * 100).toFixed(1));
+  }
+  charts.btHit = new Chart(document.getElementById('chartBtHit'), {
+    type: 'bar',
+    data: {
+      labels: hitRatePerWindow.map((_, i) => `${i * windowSize + 1}-${(i + 1) * windowSize}`),
+      datasets: [{
+        label: 'Hit Rate %',
+        data: hitRatePerWindow,
+        backgroundColor: hitRatePerWindow.map(v => parseFloat(v) > 0 ? c.green + '88' : c.red + '44'),
+        borderColor: hitRatePerWindow.map(v => parseFloat(v) > 0 ? c.green : c.red),
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, title: { display: true, text: `Hit Rate per ${windowSize} draws`, color: c.text } },
+      scales: { y: { ticks: { color: c.text, callback: v => v + '%' }, grid: { color: c.grid }, max: 100 }, x: { ticks: { color: c.text, maxRotation: 45 }, grid: { color: c.grid } } }
+    }
+  });
+
+  // Attempts chart
+  destroyChart('btAttempts');
+  charts.btAttempts = new Chart(document.getElementById('chartBtAttempts'), {
+    type: 'line',
+    data: {
+      labels: results.map((_, i) => `#${i + 1}`),
+      datasets: [
+        { label: 'Attempts to Hit', data: results.map(r => r.hitAttempt), borderColor: c.gold, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: 0.3 },
+        { label: 'Expected Random', data: results.map(() => expectedRandomAttempts), borderColor: c.red, borderDash: [5, 5], pointRadius: 0 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: c.text } } },
+      scales: { y: { ticks: { color: c.text }, grid: { color: c.grid }, type: 'logarithmic' }, x: { ticks: { color: c.text, maxTicksLimit: 20 }, grid: { color: c.grid } } }
+    }
+  });
+
+  // Detail list
+  document.getElementById('btDetails').innerHTML = results.slice().reverse().map((r, idx) => {
+    const realIdx = results.length - idx;
+    return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--muted);min-width:30px">#${realIdx}</span>
+      <span style="font-family:'Share Tech Mono',monospace;color:var(--gold2);min-width:${numDigits*12}px">${r.actual}</span>
+      <span style="color:var(--muted)">←</span>
+      <span style="color:${r.hitAttempt <= 3 ? 'var(--green)' : r.hitAttempt <= 10 ? 'var(--gold)' : 'var(--red)'}">
+        ${r.hitAttempt <= r.attempts ? `เจอในครั้งที่ ${r.hitAttempt}` : `ไม่เจอใน ${r.attempts} ครั้ง`}
+      </span>
+      ${r.predictions.length ? `<span style="color:var(--muted);font-size:0.65rem;margin-left:auto">${r.predictions.join(', ')}...</span>` : ''}
+    </div>`;
+  }).join('');
+
+  // Run comparison across all methods
+  runComparison(actualNumbers, numDigits, c);
+
+  document.getElementById('btResultArea').style.display = 'block';
+  btn.disabled = false; btn.innerHTML = '🔬 เริ่ม Backtest';
+  toast('✅ Backtest เสร็จแล้ว!');
+}
+
+function generateSinglePrediction(method, history, numDigits) {
+  const freq = Array(10).fill(1);
+  history.forEach(n => n.split('').forEach(c => freq[parseInt(c)]++));
+  const total = freq.reduce((a, b) => a + b, 0);
+  let pred = '';
+
+  if (method === 'weighted') {
+    for (let i = 0; i < numDigits; i++) {
+      let r = Math.random() * total;
+      for (let j = 0; j < 10; j++) { r -= freq[j]; if (r <= 0) { pred += j; break; } }
+    }
+  } else if (method === 'hotcold') {
+    const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1]);
+    const hot = sorted.slice(0, 5).map(x => x[0]);
+    const cold = sorted.slice(5).map(x => x[0]);
+    for (let i = 0; i < numDigits; i++) {
+      pred += Math.random() < 0.6 ? hot[Math.floor(Math.random() * hot.length)] : cold[Math.floor(Math.random() * cold.length)];
+    }
+  } else if (method === 'streak') {
+    for (let pos = 0; pos < numDigits; pos++) {
+      const posFreq = Array(10).fill(1);
+      history.forEach(n => { if (n[pos]) posFreq[parseInt(n[pos])]++; });
+      const posTotal = posFreq.reduce((a, b) => a + b, 0);
+      let r = Math.random() * posTotal;
+      for (let j = 0; j < 10; j++) { r -= posFreq[j]; if (r <= 0) { pred += j; break; } }
+    }
+  } else {
+    for (let i = 0; i < numDigits; i++) pred += Math.floor(Math.random() * 10);
+  }
+  return pred;
+}
+
+function runComparison(actualNumbers, numDigits, c) {
+  const methods = ['weighted', 'hotcold', 'streak', 'random'];
+  const methodLabels = { weighted: 'Weighted', hotcold: 'Hot/Cold', streak: 'Streak', random: 'Random' };
+  const colors = [c.gold, c.red, c.blue, c.green];
+  const comparison = {};
+
+  methods.forEach(m => {
+    comparison[m] = { attempts: [], hits: 0 };
+    for (let drawIdx = 5; drawIdx < actualNumbers.length; drawIdx++) {
+      const history = actualNumbers.slice(0, drawIdx);
+      const actual = actualNumbers[drawIdx];
+      let found = false;
+      for (let att = 0; att < 1000; att++) {
+        if (generateSinglePrediction(m, history, numDigits) === actual) {
+          comparison[m].attempts.push(att + 1);
+          comparison[m].hits++;
+          found = true;
+          break;
+        }
+      }
+      if (!found) comparison[m].attempts.push(1000);
+    }
+  });
+
+  destroyChart('btCompare');
+  // Show average attempts per method
+  const avgByMethod = methods.map(m => {
+    const avg = comparison[m].attempts.reduce((a, b) => a + b, 0) / comparison[m].attempts.length;
+    return avg;
+  });
+
+  charts.btCompare = new Chart(document.getElementById('chartBtCompare'), {
+    type: 'bar',
+    data: {
+      labels: methods.map(m => methodLabels[m]),
+      datasets: [{
+        label: 'Avg Attempts to Hit',
+        data: avgByMethod,
+        backgroundColor: colors.map(c => c + '88'),
+        borderColor: colors,
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, title: { display: true, text: 'เฉลี่ย attempts จนกว่าจะถูก (น้อย = ดี)', color: c.text } },
+      scales: { y: { ticks: { color: c.text }, grid: { color: c.grid } }, x: { ticks: { color: c.text }, grid: { color: c.grid } } }
+    }
+  });
+
+  const expectedRandom = numDigits === 2 ? 100 : 1000;
+  document.getElementById('btCompareSummary').innerHTML = methods.map((m, i) => {
+    const avg = avgByMethod[i];
+    const better = avg < expectedRandom;
+    return `<div style="margin:4px 0">${methodLabels[m]}: <strong style="color:${better ? 'var(--green)' : 'var(--red)'}">${avg.toFixed(1)}</strong> attempts ${better ? '✅' : '≈ random'}</div>`;
+  }).join('') + `<div style="margin-top:6px;font-size:0.7rem;color:var(--muted)">Expected random: ${expectedRandom} attempts | งวดที่ทดสอบ: ${comparison[methods[0]].attempts.length}</div>`;
 }
 
 // ========== INIT ==========
