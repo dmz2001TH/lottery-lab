@@ -209,8 +209,29 @@ body.light .pattern-sum { background: #fff8e1; }
 
 <!-- ===== DATA TAB ===== -->
 <div id="panel-data" class="panel active">
+  <div class="card" id="fetchCard">
+    <div class="card-title">🌐 ดึงผลหวยอัตโนมัติ</div>
+    <p style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">ดึงจาก API สำนักงานสลากกินแบ่งฯ ย้อนหลังได้สูงสุด ~480 งวด (ปี 2553–2569)</p>
+    <label>จำนวนงวดที่ต้องการดึง</label>
+    <select id="fetchCount">
+      <option value="20">20 งวด (ล่าสุด ~3 เดือน)</option>
+      <option value="50">50 งวด (~8 เดือน)</option>
+      <option value="100" selected>100 งวด (~1.5 ปี) ⭐ แนะนำ</option>
+      <option value="200">200 งวด (~3 ปี)</option>
+      <option value="480">ทั้งหมด (~480 งวด, ปี 2553–2569)</option>
+    </select>
+    <button class="btn" id="fetchBtn" onclick="fetchLotteryData()" style="margin-top:10px">📥 ดึงข้อมูลจากอินเทอร์เน็ต</button>
+    <div id="fetchStatus" style="font-size:0.75rem;color:var(--muted);margin-top:8px;display:none"></div>
+  </div>
+
+  <div class="card" id="fetchResult" style="display:none">
+    <div class="card-title">✅ ดึงข้อมูลสำเร็จ</div>
+    <div id="fetchResultInfo" style="font-size:0.82rem;color:var(--text2);line-height:1.8"></div>
+    <button class="btn green-btn" style="margin-top:8px" onclick="go('predict')">🔮 ไปทำนายเลย</button>
+  </div>
+
   <div class="card">
-    <div class="card-title">📥 ป้อนผลหวยย้อนหลัง</div>
+    <div class="card-title">📥 ป้อนผลหวยย้อนหลัง (แมนนวล)</div>
     <label>รางวัลที่ 1 (6 หลัก) — ใส่ทีละบรรทัด งวดล่าสุดก่อน</label>
     <textarea id="inp1st" placeholder="ตัวอย่าง:&#10;123456&#10;789012&#10;345678"></textarea>
 
@@ -222,7 +243,6 @@ body.light .pattern-sum { background: #fff8e1; }
 
     <button class="btn" onclick="saveData()">💾 บันทึกข้อมูลและวิเคราะห์</button>
     <button class="btn outline" style="margin-top:6px" onclick="loadSampleData()">📋 โหลดข้อมูลตัวอย่าง (100 งวด)</button>
-    <button class="btn purple-btn" style="margin-top:6px" onclick="quickSetup()">⚡ ตั้งค่าด่วน — โหลดตัวอย่าง + ตั้ง API Key</button>
   </div>
 
   <div class="card" id="dataLoaded" style="display:none">
@@ -337,9 +357,13 @@ body.light .pattern-sum { background: #fff8e1; }
 
     <label style="margin-top:12px">วิธีทำนาย</label>
     <select id="predictMethod">
-      <option value="weighted">📊 Weighted Frequency (แนะนำ)</option>
+      <option value="ensemble">⚡ Ensemble (รวมทุกวิธี — แนะนำ)</option>
+      <option value="weighted">📊 Weighted Frequency</option>
+      <option value="markov">🔗 Markov Chain</option>
+      <option value="entropy">🧮 Entropy Scoring</option>
+      <option value="gap">⏳ Gap Theory (Overdue)</option>
       <option value="hotcold">🔥 Hot/Cold Mix</option>
-      <option value="streak">📈 Streak-based (Position)</option>
+      <option value="streak">📈 Position Frequency</option>
       <option value="random">🎲 Pure Random (Control)</option>
       <option value="ai">🤖 AI Analysis (ต้องมี API Key)</option>
     </select>
@@ -580,6 +604,113 @@ function getChartColors() {
 function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
 
 // ========== DATA ==========
+// ========== AUTO FETCH FROM API ==========
+const LOTTO_API = 'https://lotto.api.rayriffy.com';
+
+async function fetchLotteryData() {
+  const count = parseInt(document.getElementById('fetchCount').value);
+  const btn = document.getElementById('fetchBtn');
+  const status = document.getElementById('fetchStatus');
+  const resultCard = document.getElementById('fetchResult');
+  const resultInfo = document.getElementById('fetchResultInfo');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>กำลังดึงข้อมูล...';
+  status.style.display = 'block';
+  status.innerHTML = '⏳ กำลังเชื่อมต่อ API...';
+  resultCard.style.display = 'none';
+
+  try {
+    // Step 1: Fetch list of all draws (paginate)
+    const allDraws = [];
+    let page = 1;
+    status.innerHTML = `⏳ กำลังโหลดรายการงวด...`;
+
+    while (allDraws.length < count) {
+      const res = await fetch(`${LOTTO_API}/list/${page}`);
+      if (!res.ok) throw new Error(`List API error: ${res.status}`);
+      const json = await res.json();
+      if (json.status !== 'success' || !json.response?.length) break;
+      allDraws.push(...json.response);
+      page++;
+      if (json.response.length < 20) break; // last page
+    }
+
+    const drawsToFetch = allDraws.slice(0, count);
+    status.innerHTML = `⏳ พบ ${allDraws.length} งวดทั้งหมด กำลังดึง ${drawsToFetch.length} งวด...`;
+
+    // Step 2: Fetch each draw's details (batched, max 5 concurrent)
+    const results = [];
+    const batchSize = 5;
+    for (let i = 0; i < drawsToFetch.length; i += batchSize) {
+      const batch = drawsToFetch.slice(i, i + batchSize);
+      const batchResults = await Promise.all(batch.map(async (draw) => {
+        try {
+          const res = await fetch(`${LOTTO_API}/lotto/${draw.id}`);
+          if (!res.ok) return null;
+          const json = await res.json();
+          if (json.status !== 'success') return null;
+          const r = json.response;
+          const first = r.prizes?.find(p => p.id === 'prizeFirst')?.number?.[0] || '';
+          const front3 = r.runningNumbers?.find(n => n.id === 'runningNumberFrontThree')?.number || [];
+          const back3 = r.runningNumbers?.find(n => n.id === 'runningNumberBackThree')?.number || [];
+          const back2 = r.runningNumbers?.find(n => n.id === 'runningNumberBackTwo')?.number?.[0] || '';
+          return { id: draw.id, date: r.date, first, front3, back3, back2 };
+        } catch { return null; }
+      }));
+      results.push(...batchResults.filter(Boolean));
+      const progress = Math.min(i + batchSize, drawsToFetch.length);
+      status.innerHTML = `⏳ ดึงข้อมูลแล้ว ${progress}/${drawsToFetch.length} งวด...`;
+    }
+
+    if (results.length === 0) throw new Error('ไม่สามารถดึงข้อมูลได้');
+
+    // Step 3: Build data object
+    const firstArr = results.filter(r => r.first && /^\d{6}$/.test(r.first)).map(r => r.first);
+    const threeArr = results.filter(r => r.back3?.length).map(r => {
+      const parts = [];
+      if (r.front3?.length) parts.push(...r.front3);
+      if (r.back3?.length) parts.push(...r.back3);
+      return parts.join(',');
+    }).filter(Boolean);
+    const twoArr = results.filter(r => r.back2 && /^\d{2}$/.test(r.back2)).map(r => r.back2);
+
+    const d = getData();
+    const merged = {
+      first: [...new Set([...(d.first||[]), ...firstArr])],
+      three: [...new Set([...(d.three||[]), ...threeArr])],
+      two: [...new Set([...(d.two||[]), ...twoArr])],
+      savedAt: new Date().toISOString()
+    };
+
+    setData(merged);
+    updateDataUI(merged);
+
+    // Show results
+    const dateRange = results.length >= 2
+      ? `${results[results.length-1].date} → ${results[0].date}`
+      : results[0]?.date || '-';
+
+    resultCard.style.display = 'block';
+    resultInfo.innerHTML = `
+      ดึงสำเร็จ: <strong style="color:var(--green)">${results.length} งวด</strong><br>
+      รางวัลที่ 1: <strong style="color:var(--gold)">${firstArr.length} งวด</strong><br>
+      เลข 3 ตัว: <strong style="color:var(--gold)">${threeArr.length} งวด</strong><br>
+      เลข 2 ตัว: <strong style="color:var(--gold)">${twoArr.length} งวด</strong><br>
+      <span style="color:var(--muted);font-size:0.7rem">ช่วงข้อมูล: ${dateRange}</span>
+    `;
+
+    status.innerHTML = `✅ ดึงข้อมูลเสร็จแล้ว — ${results.length} งวด`;
+    toast(`✅ ดึงข้อมูล ${results.length} งวดสำเร็จ!`);
+  } catch (e) {
+    status.innerHTML = `❌ Error: ${e.message}`;
+    toast('❌ ดึงข้อมูลล้มเหลว: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '📥 ดึงข้อมูลจากอินเทอร์เน็ต';
+  }
+}
+
 function saveData() {
   const p1 = document.getElementById('inp1st').value.trim();
   const p3 = document.getElementById('inp3').value.trim();
@@ -871,44 +1002,284 @@ function renderPatterns() {
 function toggleChip(k) { chips[k] = !chips[k]; document.getElementById('chip-'+k).classList.toggle('active', chips[k]); }
 
 // ========== PREDICT ==========
+// ========== PROFESSIONAL PREDICTION ENGINE ==========
+
+// Helper: weighted random pick from array of {digit, weight}
+function weightedPick(items) {
+  const total = items.reduce((s, x) => s + x.weight, 0);
+  let r = Math.random() * total;
+  for (const item of items) {
+    r -= item.weight;
+    if (r <= 0) return item.digit;
+  }
+  return items[items.length - 1].digit;
+}
+
+// Build frequency data for a given digit length
+function buildFreqData(data, numDigits) {
+  const draws = [];
+  if (numDigits === 6 && data.first?.length) draws.push(...data.first);
+  else if (numDigits === 3 && data.first?.length) draws.push(...data.first.map(n => n.slice(-3))); // last3
+  else if (numDigits === 2 && data.two?.length) draws.push(...data.two);
+
+  // Global digit frequency with exponential decay (recent = higher weight)
+  const freq = Array(10).fill(0.001);
+  const n = draws.length;
+  draws.forEach((d, i) => {
+    const recency = Math.exp(-0.03 * (n - 1 - i)); // exponential decay
+    d.split('').forEach(c => { freq[parseInt(c)] += recency; });
+  });
+
+  // Position-specific frequency
+  const posFreq = Array.from({ length: numDigits }, () => Array(10).fill(0.001));
+  draws.forEach((d, i) => {
+    const recency = Math.exp(-0.03 * (n - 1 - i));
+    d.split('').forEach((c, pos) => { if (pos < numDigits) posFreq[pos][parseInt(c)] += recency; });
+  });
+
+  // Digit transitions (what digit comes after each digit)
+  const transitions = Array.from({ length: 10 }, () => Array(10).fill(0.001));
+  for (let i = 1; i < draws.length; i++) {
+    const prev = draws[i - 1], curr = draws[i];
+    for (let pos = 0; pos < Math.min(prev.length, curr.length, numDigits); pos++) {
+      transitions[parseInt(prev[pos])][parseInt(curr[pos])]++;
+    }
+  }
+
+  // Gap: draws since each digit last appeared
+  const gap = Array(10).fill(draws.length);
+  for (let i = draws.length - 1; i >= 0; i--) {
+    draws[i].split('').forEach(c => { const d = parseInt(c); if (gap[d] === draws.length) gap[d] = draws.length - 1 - i; });
+  }
+
+  // Position interdependence: co-occurrence of digit pairs across positions
+  const coOccur = Array.from({ length: numDigits }, () =>
+    Array.from({ length: numDigits }, () => Array.from({ length: 10 }, () => Array(10).fill(0.001)))
+  );
+  draws.forEach(d => {
+    for (let p1 = 0; p1 < numDigits; p1++) {
+      for (let p2 = p1 + 1; p2 < numDigits; p2++) {
+        if (d[p1] !== undefined && d[p2] !== undefined) {
+          coOccur[p1][p2][parseInt(d[p1])][parseInt(d[p2])]++;
+          coOccur[p2][p1][parseInt(d[p2])][parseInt(d[p1])]++;
+        }
+      }
+    }
+  });
+
+  return { draws, freq, posFreq, transitions, gap, coOccur, n };
+}
+
+// Score a full number string using various methods
+function scoreNumber(numStr, fd, method) {
+  const digits = numStr.split('').map(Number);
+  const numDigits = numStr.length;
+  let score = 0;
+
+  if (method === 'weighted' || method === 'ensemble') {
+    // Exponentially weighted frequency
+    digits.forEach(d => { score += fd.freq[d]; });
+    // Position-specific
+    digits.forEach((d, pos) => {
+      const posTotal = fd.posFreq[pos].reduce((a, b) => a + b, 0);
+      score += (fd.posFreq[pos][d] / posTotal) * 50;
+    });
+  }
+
+  if (method === 'markov' || method === 'ensemble') {
+    // Digit-level Markov chain
+    if (fd.draws.length >= 2) {
+      const prevDigits = fd.draws[fd.draws.length - 1].split('').map(Number);
+      digits.forEach((d, pos) => {
+        if (prevDigits[pos] !== undefined) {
+          const row = fd.transitions[prevDigits[pos]];
+          const total = row.reduce((a, b) => a + b, 0);
+          score += (row[d] / total) * 80;
+        }
+      });
+      // Position interdependence bonus
+      digits.forEach((d, pos) => {
+        for (let other = 0; other < numDigits; other++) {
+          if (other !== pos && digits[other] !== undefined) {
+            const coRow = fd.coOccur[pos][other][d];
+            const coTotal = coRow.reduce((a, b) => a + b, 0);
+            score += (coRow[digits[other]] / coTotal) * 20;
+          }
+        }
+      });
+    }
+  }
+
+  if (method === 'entropy' || method === 'ensemble') {
+    // Entropy-based: prefer balanced/unpredictable digit combinations
+    // High entropy = digits are well-distributed (good)
+    const posEntropy = fd.posFreq.map(row => {
+      const total = row.reduce((a, b) => a + b, 0);
+      const probs = row.map(f => f / total);
+      return -probs.reduce((s, p) => s + (p > 0 ? p * Math.log2(p) : 0), 0);
+    });
+    // Reward digits that contribute to high per-position entropy
+    digits.forEach((d, pos) => {
+      const prob = fd.posFreq[pos][d] / fd.posFreq[pos].reduce((a, b) => a + b, 0);
+      const maxEntropy = Math.log2(10);
+      // Prefer digits that are common but not dominant
+      const entropy = posEntropy[pos];
+      score += prob * entropy * 15;
+    });
+    // Digit sum near center (sum reversion)
+    const sum = digits.reduce((a, b) => a + b, 0);
+    const expected = numDigits * 4.5;
+    score += (1 - Math.abs(sum - expected) / (numDigits * 4.5)) * 30;
+  }
+
+  if (method === 'gap' || method === 'ensemble') {
+    // Gap theory: overdue digits get bonus (Gambler's fallacy applied cautiously)
+    // Use sqrt of gap to dampen effect — overdue helps but doesn't dominate
+    digits.forEach(d => {
+      const g = fd.gap[d];
+      if (g > fd.n * 0.15) score += Math.sqrt(g) * 1.5; // significantly overdue
+      else if (g > fd.n * 0.08) score += Math.sqrt(g) * 0.5; // moderately overdue
+    });
+    // Penalty for recently repeating digits (natural cycling)
+    digits.forEach(d => {
+      if (fd.gap[d] <= 2) score -= 3; // just appeared, less likely to repeat
+    });
+  }
+
+  if (method === 'hotcold') {
+    // Pure hot/cold with 60/40 split
+    const sorted = fd.freq.map((f, i) => ({ d: i, f })).sort((a, b) => b.f - a.f);
+    const hot = new Set(sorted.slice(0, 5).map(x => x.d));
+    const cold = new Set(sorted.slice(5).map(x => x.d));
+    digits.forEach(d => {
+      if (hot.has(d)) score += 6;
+      else score += 4;
+    });
+  }
+
+  if (method === 'streak') {
+    // Position-specific frequency only
+    digits.forEach((d, pos) => {
+      const posTotal = fd.posFreq[pos].reduce((a, b) => a + b, 0);
+      score += (fd.posFreq[pos][d] / posTotal) * 100;
+    });
+  }
+
+  return score;
+}
+
 function generatePrediction(method, data, selected) {
   const d = data;
   const typeConf = { '1st': 6, '3f': 3, '3b': 3, '2': 2 };
-  const freq = Array(10).fill(1);
-  if (d.first?.length) d.first.forEach(n => n.split('').forEach(c => freq[parseInt(c)]++));
-  const total = freq.reduce((a,b)=>a+b,0);
   const result = {};
 
   selected.forEach(k => {
-    const len = typeConf[k]; if (!len) return;
-    let num = '';
+    const numDigits = typeConf[k]; if (!numDigits) return;
 
-    if (method === 'weighted') {
-      for (let i=0; i<len; i++) {
-        let r = Math.random() * total;
-        for (let j=0; j<10; j++) { r -= freq[j]; if (r <= 0) { num += j; break; } }
-      }
-    } else if (method === 'hotcold') {
-      const sorted = [...freq.entries()].sort((a,b)=>b[1]-a[1]);
-      const hot = sorted.slice(0,5).map(x=>x[0]); const cold = sorted.slice(5).map(x=>x[0]);
-      for (let i=0; i<len; i++) {
-        num += Math.random() < 0.6 ? hot[Math.floor(Math.random()*hot.length)] : cold[Math.floor(Math.random()*cold.length)];
-      }
-    } else if (method === 'streak') {
-      // Use position-specific frequency
-      for (let pos=0; pos<len; pos++) {
-        const posFreq = Array(10).fill(1);
-        if (d.first?.length) d.first.forEach(n => { if (n[pos]) posFreq[parseInt(n[pos])]++; });
-        const posTotal = posFreq.reduce((a,b)=>a+b,0);
-        let r = Math.random() * posTotal;
-        for (let j=0; j<10; j++) { r -= posFreq[j]; if (r <= 0) { num += j; break; } }
-      }
-    } else { // random
-      for (let i=0; i<len; i++) num += Math.floor(Math.random()*10);
+    if (method === 'random') {
+      // Pure random — control group
+      let num = '';
+      for (let i = 0; i < numDigits; i++) num += Math.floor(Math.random() * 10);
+      result[k] = num;
+      return;
     }
-    result[k] = num;
+
+    // Build frequency data for this digit length
+    const fd = buildFreqData(d, numDigits);
+    const maxNum = Math.pow(10, numDigits);
+
+    if (method === 'ensemble') {
+      // Ensemble: score every number with ALL methods, take top score
+      const scores = [];
+      for (let n = 0; n < maxNum; n++) {
+        const str = n.toString().padStart(numDigits, '0');
+        const weighted = scoreNumber(str, fd, 'weighted');
+        const markov = scoreNumber(str, fd, 'markov');
+        const entropy = scoreNumber(str, fd, 'entropy');
+        const gap = scoreNumber(str, fd, 'gap');
+        // Ensemble: weighted average of all signals
+        const ensemble = weighted * 0.30 + markov * 0.30 + entropy * 0.20 + gap * 0.20;
+        scores.push({ str, score: ensemble, breakdown: { weighted, markov, entropy, gap } });
+      }
+      scores.sort((a, b) => b.score - a.score);
+      // Return top pick — deterministic (best score), not random
+      result[k] = scores[0].str;
+    } else {
+      // Single method: score every number, pick top
+      const scores = [];
+      for (let n = 0; n < maxNum; n++) {
+        const str = n.toString().padStart(numDigits, '0');
+        scores.push({ str, score: scoreNumber(str, fd, method) });
+      }
+      scores.sort((a, b) => b.score - a.score);
+      result[k] = scores[0].str;
+    }
   });
+
   return result;
+}
+
+// Get detailed analysis for display
+function getPredictionAnalysis(method, data, selected) {
+  const typeConf = { '1st': 6, '3f': 3, '3b': 3, '2': 2 };
+  const analyses = {};
+
+  selected.forEach(k => {
+    const numDigits = typeConf[k]; if (!numDigits) return;
+    const fd = buildFreqData(data, numDigits);
+    const maxNum = Math.pow(10, numDigits);
+
+    // Score top 5 numbers
+    const scores = [];
+    for (let n = 0; n < maxNum; n++) {
+      const str = n.toString().padStart(numDigits, '0');
+      if (method === 'ensemble') {
+        const w = scoreNumber(str, fd, 'weighted');
+        const m = scoreNumber(str, fd, 'markov');
+        const e = scoreNumber(str, fd, 'entropy');
+        const g = scoreNumber(str, fd, 'gap');
+        scores.push({ str, score: w * 0.3 + m * 0.3 + e * 0.2 + g * 0.2, w, m, e, g });
+      } else if (method === 'random') {
+        scores.push({ str, score: 0 });
+      } else {
+        scores.push({ str, score: scoreNumber(str, fd, method) });
+      }
+    }
+    scores.sort((a, b) => b.score - a.score);
+
+    // Hot/cold digits
+    const hotDigits = fd.freq.map((f, i) => ({ d: i, f })).sort((a, b) => b.f - a.f).slice(0, 3).map(x => x.d);
+    const coldDigits = fd.freq.map((f, i) => ({ d: i, f })).sort((a, b) => a.f - b.f).slice(0, 3).map(x => x.d);
+
+    // Gap info
+    const overdueDigits = fd.gap.map((g, i) => ({ d: i, g })).sort((a, b) => b.g - a.g).slice(0, 3);
+
+    // Transition from last draw
+    let transInfo = '';
+    if (fd.draws.length >= 2) {
+      const lastDraw = fd.draws[fd.draws.length - 1];
+      const prevDigits = lastDraw.split('').map(Number);
+      transInfo = `งวดล่าสุด: ${lastDraw} → `;
+      const transPreds = prevDigits.map(pd => {
+        const row = fd.transitions[pd];
+        const total = row.reduce((a, b) => a + b, 0);
+        const best = row.map((c, i) => ({ d: i, p: (c / total * 100).toFixed(1) })).sort((a, b) => b.p - a.p)[0];
+        return `${pd}→${best.d}(${best.p}%)`;
+      });
+      transInfo += transPreds.join(', ');
+    }
+
+    analyses[k] = {
+      top5: scores.slice(0, 5),
+      hotDigits,
+      coldDigits,
+      overdueDigits,
+      transInfo,
+      drawCount: fd.n
+    };
+  });
+
+  return analyses;
 }
 
 async function runAI() {
@@ -929,8 +1300,8 @@ async function runAI() {
   if (method === 'ai') {
     const apiKey = localStorage.getItem(SK.api);
     if (!apiKey) {
-      box.textContent = '⚠️ ไม่ได้ตั้งค่า API Key\nกำลังใช้ Local Statistical Analysis แทน...\n';
-      const preds = generatePrediction('weighted', d, selected);
+      box.textContent = '⚠️ ไม่ได้ตั้งค่า API Key\nกำลังใช้ Local Ensemble Analysis แทน...\n';
+      const preds = generatePrediction('ensemble', d, selected);
       let analysis = '\n📊 ผลวิเคราะห์ Local:\n';
       selected.forEach(k => { analysis += `  ${typeLabels[k]}: ${preds[k]}\n`; });
       analysis += '\n⚠️ ตั้งค่า API Key ในแท็บ ส่งออก เพื่อใช้ AI จริง';
@@ -980,8 +1351,8 @@ ${dataStr || '(ไม่มีข้อมูล)'}
         selected.forEach(k => { const m = text.match(patterns[k]); if (m) extracted[k] = m[1]; });
         buildPredictFields(selected, text, extracted);
       } catch(e) {
-        box.textContent = `❌ API Error: ${e.message}\n\nกำลังใช้ Local Analysis แทน...`;
-        const preds = generatePrediction('weighted', d, selected);
+        box.textContent = `❌ API Error: ${e.message}\n\nกำลังใช้ Local Ensemble Analysis แทน...`;
+        const preds = generatePrediction('ensemble', d, selected);
         let fallback = '\n📊 Local Fallback:\n';
         selected.forEach(k => { fallback += `  ${typeLabels[k]}: ${preds[k]}\n`; });
         box.textContent += fallback;
@@ -990,17 +1361,68 @@ ${dataStr || '(ไม่มีข้อมูล)'}
     }
   } else {
     const preds = generatePrediction(method, d, selected);
-    const methodNames = { weighted: '📊 Weighted Frequency', hotcold: '🔥 Hot/Cold Mix', streak: '📈 Streak-based', random: '🎲 Pure Random' };
-    let analysis = `${methodNames[method]} Analysis\n\n`;
-    if (d.first?.length) {
+    const analysisData = getPredictionAnalysis(method, d, selected);
+    const methodNames = {
+      ensemble: '⚡ Ensemble (Weighted + Markov + Entropy + Gap)',
+      weighted: '📊 Weighted Frequency (Exponential Decay)',
+      markov: '🔗 Markov Chain (Digit Transitions)',
+      entropy: '🧮 Entropy Scoring (Distribution Balance)',
+      gap: '⏳ Gap Theory (Overdue Detection)',
+      hotcold: '🔥 Hot/Cold Mix',
+      streak: '📈 Position Frequency',
+      random: '🎲 Pure Random (Control)'
+    };
+
+    let analysis = `${methodNames[method] || method}\n${'═'.repeat(36)}\n\n`;
+
+    if (method !== 'random' && d.first?.length) {
       const freq = Array(10).fill(0); d.first.forEach(n => n.split('').forEach(c => freq[parseInt(c)]++));
       const sorted = [...freq.entries()].sort((a,b)=>b[1]-a[1]);
-      analysis += `Top 3: ${sorted.slice(0,3).map(([d,f])=>`${d}(${f}x)`).join(', ')}\n`;
-      analysis += `Bottom 3: ${sorted.slice(-3).map(([d,f])=>`${d}(${f}x)`).join(', ')}\n\n`;
+      analysis += `📊 ความถี่ตัวเลข (${d.first.length} งวด):\n`;
+      analysis += `  🔥 Hot: ${sorted.slice(0,3).map(([d,f])=>`${d}(${f}x)`).join(', ')}\n`;
+      analysis += `  ❄️ Cold: ${sorted.slice(-3).map(([d,f])=>`${d}(${f}x)`).join(', ')}\n\n`;
+
+      selected.forEach(k => {
+        const a = analysisData[k];
+        if (!a) return;
+        const typeLabels2 = {'1st':'รางวัลที่ 1','3f':'หน้า 3 ตัว','3b':'ท้าย 3 ตัว','2':'ท้าย 2 ตัว'};
+        analysis += `▸ ${typeLabels2[k]}:\n`;
+
+        // Top 5 predictions
+        if (a.top5?.length && method !== 'random') {
+          analysis += `  Top 5: ${a.top5.map((p,i) => `${i+1}.${p.str}`).join(' | ')}\n`;
+        }
+
+        // Overdue digits
+        if (a.overdueDigits?.length) {
+          const odInfo = a.overdueDigits.map(od => `${od.d}(${od.g} งวดไม่ออก)`).join(', ');
+          analysis += `  ⏳ เกินกำหนด: ${odInfo}\n`;
+        }
+
+        // Transition info
+        if (a.transInfo) analysis += `  🔗 ${a.transInfo}\n`;
+
+        // Ensemble breakdown
+        if (method === 'ensemble' && a.top5?.[0]?.w !== undefined) {
+          const best = a.top5[0];
+          analysis += `  📐 Breakdown: W=${best.w?.toFixed(1)} M=${best.m?.toFixed(1)} E=${best.e?.toFixed(1)} G=${best.g?.toFixed(1)}\n`;
+        }
+        analysis += '\n';
+      });
     }
-    analysis += 'ผลทำนาย:\n';
-    selected.forEach(k => { analysis += `  ${typeLabels[k]}: ${preds[k]}\n`; });
-    analysis += '\n⚠️ นี่เป็นการสุ่มถ่วงน้ำหนัก ไม่ใช่การทำนายจริง';
+
+    analysis += '═'.repeat(36) + '\n';
+    analysis += '🎯 ผลทำนาย:\n';
+    selected.forEach(k => { analysis += `  ${{'1st':'รางวัลที่ 1','3f':'หน้า 3 ตัว','3b':'ท้าย 3 ตัว','2':'ท้าย 2 ตัว'}[k]}: ${preds[k]}\n`; });
+
+    if (method === 'random') {
+      analysis += '\n🎲 กลุ่มควบคุม — สุ่มล้วน ไม่ใช้สถิติ';
+    } else if (method === 'ensemble') {
+      analysis += '\n⚡ Ensemble = 30% Freq + 30% Markov + 20% Entropy + 20% Gap\n⚠️ หวยเป็นการสุ่ม 100% — นี่เป็นการทดลองทางสถิติ';
+    } else {
+      analysis += '\n⚠️ หวยเป็นการสุ่ม 100% — นี่เป็นการทดลองทางสถิติ';
+    }
+
     box.textContent = analysis;
     buildPredictFields(selected, analysis, preds);
   }
@@ -1095,7 +1517,7 @@ function renderTrack() {
   } else { verifyCard.style.display='none'; }
 
   const typeLabels = {'1st':'รางวัลที่ 1','3f':'หน้า 3','3b':'ท้าย 3','2':'ท้าย 2'};
-  const methodEmoji = { ai:'🤖', weighted:'📊', hotcold:'🔥', streak:'📈', random:'🎲' };
+  const methodEmoji = { ai:'🤖', ensemble:'⚡', weighted:'📊', markov:'🔗', entropy:'🧮', gap:'⏳', hotcold:'🔥', streak:'📈', random:'🎲' };
   recList.innerHTML = preds.slice().reverse().map(p => {
     const status = !p.actual ? 'pending' : Object.keys(p.pred).every(k=>p.actual[k]===p.pred[k]) ? 'hit' : 'miss';
     const label = {pending:'⏳ รอผล',hit:'✅ ถูก!',miss:'❌ ผิด'}[status];
