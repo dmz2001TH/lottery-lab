@@ -336,11 +336,11 @@ body.light .pattern-sum { background: #fff8e1; }
 
     <label style="margin-top:12px">วิธีทำนาย</label>
     <select id="predictMethod">
-      <option value="ai">🤖 AI Analysis (Claude API)</option>
-      <option value="weighted">📊 Weighted Frequency</option>
+      <option value="weighted">📊 Weighted Frequency (แนะนำ)</option>
       <option value="hotcold">🔥 Hot/Cold Mix</option>
-      <option value="streak">📈 Streak-based</option>
+      <option value="streak">📈 Streak-based (Position)</option>
       <option value="random">🎲 Pure Random (Control)</option>
+      <option value="ai">🤖 AI Analysis (ต้องมี API Key)</option>
     </select>
 
     <button class="btn" id="aiBtn" onclick="runAI()">🤖 วิเคราะห์และทำนาย</button>
@@ -777,7 +777,7 @@ function renderPatterns() {
     ${isSignificant
       ? `<span style="color:var(--red)">⚠️ มีนัยสำคัญทางสถิติ (p < 0.05) — อาจมี bias ในการกระจายตัวเลข</span>`
       : `<span style="color:var(--green)">✅ ไม่มีนัยสำคัญทางสถิติ — การกระจายตัวเลขสอดคล้องกับ random (p ≥ 0.05)</span>`}<br>
-    <span style="font-size:0.7rem;color:var(--muted)">📌 ถ้า ω² > 16.92 (α=0.05) → ปฏิเสธ H₀ (ว่าตัวเลขกระจายเท่ากัน)</span>
+    <span style="font-size:0.7rem;color:var(--muted)">📌 ถ้า χ² > 16.92 (df=9, α=0.05) → ปฏิเสธ H₀ (ว่าตัวเลขกระจายเท่ากัน)</span>
   `;
 
   // Streak info
@@ -1100,13 +1100,7 @@ async function exportPDF() {
 // ========== QUICK SETUP ==========
 function quickSetup() {
   loadSampleData();
-  const key = prompt('ใส่ Claude API Key (sk-ant-... หรือ sk-...):', localStorage.getItem(SK.api) || '');
-  if (key && key.trim()) {
-    localStorage.setItem(SK.api, key.trim());
-    toast('✅ ตั้งค่าสำเร็จ! ไปแท็บ สถิติ/Pattern/ทำนาย ได้เลย');
-  } else {
-    toast('✅ โหลดตัวอย่างแล้ว! (ไม่มี API Key — ใช้ Local Analysis)');
-  }
+  toast('✅ โหลดตัวอย่าง 100 งวดแล้ว! กำลังพาไปหน้าสถิติ...');
   setTimeout(() => go('stats'), 500);
 }
 
