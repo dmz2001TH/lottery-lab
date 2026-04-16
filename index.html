@@ -221,6 +221,7 @@ body.light .pattern-sum { background: #fff8e1; }
 
     <button class="btn" onclick="saveData()">💾 บันทึกข้อมูลและวิเคราะห์</button>
     <button class="btn outline" style="margin-top:6px" onclick="loadSampleData()">📋 โหลดข้อมูลตัวอย่าง (100 งวด)</button>
+    <button class="btn purple-btn" style="margin-top:6px" onclick="quickSetup()">⚡ ตั้งค่าด่วน — โหลดตัวอย่าง + ตั้ง API Key</button>
   </div>
 
   <div class="card" id="dataLoaded" style="display:none">
@@ -1094,6 +1095,19 @@ async function exportPDF() {
     link.click();
     toast('✅ ดาวน์โหลดรายงานแล้ว!');
   } catch(e) { toast('❌ Error: ' + e.message); }
+}
+
+// ========== QUICK SETUP ==========
+function quickSetup() {
+  loadSampleData();
+  const key = prompt('ใส่ Claude API Key (sk-ant-... หรือ sk-...):', localStorage.getItem(SK.api) || '');
+  if (key && key.trim()) {
+    localStorage.setItem(SK.api, key.trim());
+    toast('✅ ตั้งค่าสำเร็จ! ไปแท็บ สถิติ/Pattern/ทำนาย ได้เลย');
+  } else {
+    toast('✅ โหลดตัวอย่างแล้ว! (ไม่มี API Key — ใช้ Local Analysis)');
+  }
+  setTimeout(() => go('stats'), 500);
 }
 
 // ========== INIT ==========
