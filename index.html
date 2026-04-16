@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lottery Lab — วิเคราะห์หวยไทยเชิงสถิติ</title>
+<meta name="description" content="เครื่องมือวิเคราะห์หวยไทยเชิงวิทยาศาสตร์ สถิติ ความถี่ pattern detection และทำนายด้วย AI">
+<meta property="og:title" content="🧪 Lottery Lab — วิเคราะห์หวยไทย">
+<meta property="og:description" content="วิเคราะห์หวยไทยเชิงสถิติ ตรวจ pattern ความถี่ ทำนายด้วย AI วัดผลจริงทุกงวด">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#070810">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+:root {
+  --bg: #070810; --s1: #0e0f1c; --s2: #161728; --s3: #1e1f34; --border: #2c2d4a;
+  --gold: #e8b84b; --gold2: #ffd97a; --red: #ff3d5a; --green: #2ecc98; --blue: #4d9fff;
+  --purple: #a855f7; --muted: #5a5b7e; --text: #c8cae8; --text2: #8890b8;
+  --card-bg: var(--s1); --input-bg: var(--s2);
+}
+body.light {
+  --bg: #f0f0f5; --s1: #ffffff; --s2: #f5f5fa; --s3: #ebebf0; --border: #d0d0e0;
+  --gold: #b8860b; --gold2: #8b6914; --red: #d32f2f; --green: #2e7d32; --blue: #1565c0;
+  --purple: #7b1fa2; --muted: #888899; --text: #1a1a2e; --text2: #555566;
+  --card-bg: var(--s1); --input-bg: var(--s2);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg); color: var(--text); font-family: 'Sarabun', sans-serif;
+  font-size: 15px; min-height: 100vh; overflow-x: hidden; transition: background 0.3s, color 0.3s;
+}
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.4;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+.wrap { position: relative; z-index: 1; max-width: 520px; margin: 0 auto; padding: 16px; }
+
+/* Header */
+.header { text-align: center; padding: 24px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; position: relative; }
+.logo { font-size: 0.65rem; letter-spacing: 4px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.title { font-size: 1.6rem; font-weight: 700; background: linear-gradient(135deg, var(--gold), var(--gold2), #fff8e0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1.2; }
+.tagline { font-size: 0.75rem; color: var(--muted); margin-top: 6px; }
+.theme-toggle { position: absolute; top: 24px; right: 0; background: var(--s2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 10px; cursor: pointer; font-size: 1.1rem; transition: all 0.2s; }
+.theme-toggle:hover { border-color: var(--gold); }
+
+/* Warning */
+.warn { background: linear-gradient(135deg, #1a080e, #100a1a); border: 1px solid #3d1020; border-radius: 10px; padding: 12px 14px; font-size: 0.78rem; color: #cc7788; line-height: 1.65; margin-bottom: 18px; }
+.warn strong { color: var(--red); }
+body.light .warn { background: #fff5f5; color: #8b3a3a; border-color: #ffcccc; }
+
+/* Tabs */
+.tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 18px; background: var(--s1); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.tab { padding: 8px 2px; border-radius: 7px; border: none; background: transparent; color: var(--muted); font-family: 'Sarabun', sans-serif; font-size: 0.65rem; cursor: pointer; transition: all 0.2s; text-align: center; line-height: 1.3; }
+.tab.active { background: var(--s3); color: var(--gold); border: 1px solid var(--border); }
+
+/* Panel */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* Card */
+.card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+.card-title { font-size: 0.85rem; font-weight: 600; color: var(--gold2); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+
+/* Form */
+label { font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px; margin-top: 10px; }
+label:first-child { margin-top: 0; }
+input[type=text], input[type=date], select, textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 9px 12px; font-family: 'Sarabun', sans-serif; font-size: 0.88rem; transition: border-color 0.2s; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); }
+textarea { resize: vertical; min-height: 90px; font-family: 'Share Tech Mono', monospace; font-size: 0.8rem; }
+
+.btn { width: 100%; padding: 11px; border-radius: 9px; border: none; background: var(--gold); color: #0a0800; font-family: 'Sarabun', sans-serif; font-size: 0.9rem; font-weight: 700; cursor: pointer; margin-top: 12px; transition: all 0.2s; position: relative; overflow: hidden; }
+.btn:hover { opacity: 0.88; transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text2); }
+.btn.green-btn { background: var(--green); color: #001a10; }
+.btn.purple-btn { background: var(--purple); color: #fff; }
+.btn.red-btn { background: transparent; border: 1px solid var(--red); color: var(--red); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Digit frequency */
+.digit-row { display: flex; gap: 5px; margin-top: 8px; }
+.digit-box { flex: 1; background: var(--s2); border: 1px solid var(--border); border-radius: 8px; text-align: center; padding: 7px 2px; transition: all 0.3s; }
+.digit-box .d { font-family: 'Share Tech Mono', monospace; font-size: 1rem; }
+.digit-box .c { font-size: 0.6rem; color: var(--muted); margin-top: 2px; }
+.digit-box.hot { border-color: var(--red); background: #1a060c; } .digit-box.hot .d { color: var(--red); }
+.digit-box.cold { border-color: var(--blue); background: #060c1a; } .digit-box.cold .d { color: var(--blue); }
+
+/* Chart container */
+.chart-container { position: relative; height: 220px; margin: 10px 0; }
+.chart-container canvas { width: 100% !important; height: 100% !important; }
+
+/* AI output */
+.ai-box { background: #070e0a; border: 1px solid #1a3025; border-radius: 10px; padding: 14px; margin-top: 12px; font-size: 0.8rem; color: #7dcfaa; font-family: 'Share Tech Mono', monospace; line-height: 1.7; white-space: pre-wrap; word-break: break-word; min-height: 60px; display: none; }
+body.light .ai-box { background: #f0faf5; color: #1a5c3a; border-color: #a0d8b8; }
+
+/* Record items */
+.rec { background: var(--s2); border: 1px solid var(--border); border-radius: 10px; padding: 13px; margin-bottom: 10px; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+.rec-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.rec-draw { font-size: 0.72rem; color: var(--muted); }
+.badge { font-size: 0.65rem; font-weight: 700; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.5px; }
+.badge.pending { background: #1a1500; color: var(--gold); border: 1px solid var(--gold); }
+.badge.hit { background: #001a0e; color: var(--green); border: 1px solid var(--green); }
+.badge.miss { background: #1a0006; color: var(--red); border: 1px solid var(--red); }
+body.light .badge.pending { background: #fff8e0; }
+body.light .badge.hit { background: #e8f5e9; }
+body.light .badge.miss { background: #ffebee; }
+
+.rec-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 6px; }
+.rec-type { background: var(--s3); border-radius: 6px; padding: 6px 5px; text-align: center; }
+.rec-type .type-label { font-size: 0.6rem; color: var(--muted); }
+.rec-type .type-num { font-family: 'Share Tech Mono', monospace; font-size: 0.88rem; color: var(--gold2); letter-spacing: 1px; }
+.rec-type .type-actual { font-size: 0.62rem; color: var(--green); font-family: 'Share Tech Mono', monospace; }
+.rec-type.matched { background: #001a0a; border: 1px solid var(--green); }
+.rec-type.wrong { background: #1a0006; border: 1px solid #3d0010; }
+
+/* Score */
+.scoreboard { background: linear-gradient(135deg, #0a0f12, #0d1020); border: 1px solid #1e3040; border-radius: 12px; padding: 16px; margin-bottom: 14px; text-align: center; }
+body.light .scoreboard { background: linear-gradient(135deg, #e8f0f8, #f0f4ff); border-color: #c0d0e8; }
+.score-val { font-size: 2.4rem; font-weight: 700; font-family: 'Share Tech Mono', monospace; color: var(--green); }
+.score-sub { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+.bar-bg { background: var(--s3); border-radius: 20px; height: 8px; margin: 10px 0 4px; overflow: hidden; }
+.bar-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--green)); border-radius: 20px; transition: width 0.6s; }
+.score-note { font-size: 0.7rem; color: #445544; }
+.score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+.score-cell { background: var(--s3); border-radius: 8px; padding: 8px; text-align: center; }
+.score-cell .sv { font-size: 1rem; font-weight: 700; font-family: 'Share Tech Mono', monospace; }
+.score-cell .sl { font-size: 0.6rem; color: var(--muted); margin-top: 2px; }
+
+/* Spinner */
+.spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #333; border-top-color: var(--gold); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { text-align: center; color: var(--muted); padding: 28px 0; font-size: 0.82rem; line-height: 1.7; }
+.sep { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.chip { font-size: 0.7rem; padding: 4px 10px; border-radius: 20px; background: var(--s3); border: 1px solid var(--border); color: var(--text2); cursor: pointer; transition: all 0.15s; }
+.chip:hover { border-color: var(--gold); color: var(--gold); }
+.chip.active { background: #1a1400; border-color: var(--gold); color: var(--gold); }
+body.light .chip.active { background: #fff8e0; }
+
+/* Predict grid */
+.predict-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.predict-cell { background: var(--s2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; text-align: center; }
+.predict-cell .ptype { font-size: 0.62rem; color: var(--muted); margin-bottom: 4px; }
+.predict-cell input { margin-top: 4px; font-size: 0.8rem; text-align: center; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; }
+
+/* Export */
+.export-area { background: var(--s2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-top: 8px; }
+.export-area textarea { min-height: 50px; font-size: 0.72rem; }
+
+/* Toast */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--s3); border: 1px solid var(--gold); color: var(--gold2); padding: 10px 20px; border-radius: 10px; font-size: 0.82rem; z-index: 999; transition: transform 0.3s ease; pointer-events: none; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* Streak display */
+.streak-bar { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 6px; }
+.streak-dot { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.55rem; font-family: 'Share Tech Mono', monospace; }
+.streak-hot { background: #3d0010; color: var(--red); border: 1px solid var(--red); }
+.streak-cold { background: #060c1a; color: var(--blue); border: 1px solid var(--blue); }
+.streak-normal { background: var(--s3); color: var(--text2); border: 1px solid var(--border); }
+
+/* Pattern badges */
+.pattern-badge { display: inline-block; font-size: 0.65rem; padding: 2px 8px; border-radius: 12px; margin: 2px; }
+.pattern-odd { background: #1a0a2e; color: var(--purple); border: 1px solid var(--purple); }
+.pattern-even { background: #0a1a2e; color: var(--blue); border: 1px solid var(--blue); }
+.pattern-sum { background: #1a1a00; color: var(--gold); border: 1px solid var(--gold); }
+body.light .pattern-odd { background: #f3e5f5; }
+body.light .pattern-even { background: #e3f2fd; }
+body.light .pattern-sum { background: #fff8e1; }
+
+/* PDF capture */
+#captureArea { background: var(--bg); padding: 20px; }
+
+@media (max-width: 360px) {
+  .wrap { padding: 10px; }
+  .predict-grid, .rec-grid, .score-grid { grid-template-columns: repeat(2, 1fr); }
+  .tabs { grid-template-columns: repeat(3, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="header">
+  <button class="theme-toggle" onclick="toggleTheme()" title="สลับธีม">🌙</button>
+  <div class="logo">🧪 Experimental Lab</div>
+  <div class="title">Lottery Analyzer</div>
+  <div class="tagline">ทดสอบเชิงวิทยาศาสตร์ — วัดผลจริงทุกงวด</div>
+</div>
+
+<div class="warn">
+  <strong>⚠️ การทดลองนี้เพื่อพิสูจน์ข้อเท็จจริง</strong> — AI ไม่สามารถทำนายหวยได้จริง
+  เพราะหวยไทยเป็นการสุ่ม 100% ผลการทำนาย<strong>ไม่ควรนำไปซื้อสลาก</strong>
+  เครื่องมือนี้สร้างมาเพื่อ<strong>บันทึกและวัดผล</strong>ว่าแม่นจริงแค่ไหน
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="go('data')">📥<br>ข้อมูล</button>
+  <button class="tab" onclick="go('stats')">📊<br>สถิติ</button>
+  <button class="tab" onclick="go('pattern')">🧬<br>Pattern</button>
+  <button class="tab" onclick="go('predict')">🔮<br>ทำนาย</button>
+  <button class="tab" onclick="go('track')">📋<br>บันทึก</button>
+  <button class="tab" onclick="go('export')">📤<br>ส่งออก</button>
+</div>
+
+<!-- ===== DATA TAB ===== -->
+<div id="panel-data" class="panel active">
+  <div class="card">
+    <div class="card-title">📥 ป้อนผลหวยย้อนหลัง</div>
+    <label>รางวัลที่ 1 (6 หลัก) — ใส่ทีละบรรทัด งวดล่าสุดก่อน</label>
+    <textarea id="inp1st" placeholder="ตัวอย่าง:&#10;123456&#10;789012&#10;345678"></textarea>
+
+    <label>เลขท้าย 3 ตัว (หน้า/หลัง)</label>
+    <textarea id="inp3" placeholder="ตัวอย่าง:&#10;456,789&#10;012,345&#10;(คั่นด้วย comma ถ้ามี 2 ชุด)"></textarea>
+
+    <label>เลขท้าย 2 ตัว</label>
+    <textarea id="inp2" placeholder="ตัวอย่าง:&#10;56&#10;89&#10;34"></textarea>
+
+    <button class="btn" onclick="saveData()">💾 บันทึกข้อมูลและวิเคราะห์</button>
+    <button class="btn outline" style="margin-top:6px" onclick="loadSampleData()">📋 โหลดข้อมูลตัวอย่าง (100 งวด)</button>
+  </div>
+
+  <div class="card" id="dataLoaded" style="display:none">
+    <div class="card-title">✅ ข้อมูลที่บันทึกไว้</div>
+    <div id="dataLoadedInfo" style="font-size:0.82rem;color:var(--text2);line-height:1.8"></div>
+    <button class="btn red-btn" style="margin-top:8px" onclick="clearData()">🗑 ล้างข้อมูลทั้งหมด</button>
+  </div>
+</div>
+
+<!-- ===== STATS TAB ===== -->
+<div id="panel-stats" class="panel">
+  <div id="statsEmpty" class="card"><div class="empty">ยังไม่มีข้อมูล<br>ไปแท็บ "ข้อมูล" ป้อนผลหวยก่อนครับ</div></div>
+  <div id="statsMain" style="display:none">
+    <div class="card">
+      <div class="card-title">🔢 ความถี่ตัวเลขรวม (รางวัลที่ 1)</div>
+      <div class="digit-row" id="freqBar"></div>
+      <div class="chart-container"><canvas id="chartFreq"></canvas></div>
+      <div style="display:flex;gap:12px;margin-top:4px;font-size:0.68rem;color:var(--muted)">
+        <span style="color:var(--red)">■ ออกบ่อย</span><span style="color:var(--blue)">■ ออกน้อย</span><span>■ ปกติ</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📐 ความถี่ตามตำแหน่ง</div>
+      <div id="posFreqTable" style="font-size:0.75rem;line-height:1.8"></div>
+      <div class="chart-container"><canvas id="chartPos"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔥 Streak Analysis (รางวัลที่ 1)</div>
+      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:6px">ตัวเลขที่ออกติดต่อกันมากที่สุดในแต่ละงวด</p>
+      <div id="streakInfo" style="font-size:0.82rem;line-height:1.8;color:var(--text2)"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📈 เลขท้าย 2 ตัว — ความถี่ Top 15</div>
+      <div class="chart-container" style="height:260px"><canvas id="chart2dig"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔄 เลขที่ยังไม่ออก / ออกน้อย</div>
+      <div id="coldNumbers" style="font-size:0.82rem;color:var(--text2)"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📋 สรุปภาพรวม</div>
+      <div id="statsSummary" style="font-size:0.82rem;line-height:1.9;color:var(--text2)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PATTERN TAB ===== -->
+<div id="panel-pattern" class="panel">
+  <div id="patternEmpty" class="card"><div class="empty">ยังไม่มีข้อมูล<br>ไปแท็บ "ข้อมูล" ป้อนผลหวยก่อนครับ</div></div>
+  <div id="patternMain" style="display:none">
+    <div class="card">
+      <div class="card-title">🧬 Odd/Even Ratio Analysis</div>
+      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px">อัตราส่วนเลขคี่/คู่ ในรางวัลที่ 1 (6 หลัก)</p>
+      <div id="oddEvenStats" style="font-size:0.82rem;line-height:1.9;color:var(--text2)"></div>
+      <div class="chart-container"><canvas id="chartOddEven"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">➕ Sum Range Analysis</div>
+      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px">ผลรวมของตัวเลข 6 หลัก — กระจายอยู่ช่วงไหน</p>
+      <div id="sumStats" style="font-size:0.82rem;line-height:1.9;color:var(--text2)"></div>
+      <div class="chart-container"><canvas id="chartSum"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔗 Consecutive Digit Detection</div>
+      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px">ตรวจเลขเรียงลำดับติดกัน เช่น 12, 34, 89</p>
+      <div id="consecStats" style="font-size:0.82rem;line-height:1.9;color:var(--text2)"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎯 Repeating Digit Detection</div>
+      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px">ตรวจเลขซ้ำในรางวัลที่ 1 เช่น 11, 22, 333</p>
+      <div id="repeatStats" style="font-size:0.82rem;line-height:1.9;color:var(--text2)"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 Digit Pair Frequency (Bigram)</div>
+      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px">คู่ตัวเลขที่ปรากฏติดกันบ่อยที่สุด</p>
+      <div class="chart-container" style="height:260px"><canvas id="chartBigram"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🧮 Chi-Square Test</div>
+      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px">ทดสอบว่าการกระจายตัวเลขแตกต่างจาก random อย่างมีนัยสำคัญหรือไม่</p>
+      <div id="chiSquareResult" style="font-size:0.82rem;line-height:1.9;color:var(--text2)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PREDICT TAB ===== -->
+<div id="panel-predict" class="panel">
+  <div class="card">
+    <div class="card-title">🔮 ให้ AI ทำนายงวดหน้า</div>
+    <label>งวดที่จะออกผล</label>
+    <input type="text" id="nextDrawDate" placeholder="เช่น 16/06/2568">
+
+    <div style="margin-top:10px">
+      <div style="font-size:0.75rem;color:var(--muted);margin-bottom:6px">เลือกประเภทที่ต้องการทำนาย</div>
+      <div class="chip-row">
+        <div class="chip active" id="chip-1st" onclick="toggleChip('1st')">รางวัลที่ 1</div>
+        <div class="chip active" id="chip-3f" onclick="toggleChip('3f')">เลขหน้า 3 ตัว</div>
+        <div class="chip active" id="chip-3b" onclick="toggleChip('3b')">เลขท้าย 3 ตัว</div>
+        <div class="chip active" id="chip-2" onclick="toggleChip('2')">เลขท้าย 2 ตัว</div>
+      </div>
+    </div>
+
+    <label style="margin-top:12px">วิธีทำนาย</label>
+    <select id="predictMethod">
+      <option value="ai">🤖 AI Analysis (Claude API)</option>
+      <option value="weighted">📊 Weighted Frequency</option>
+      <option value="hotcold">🔥 Hot/Cold Mix</option>
+      <option value="streak">📈 Streak-based</option>
+      <option value="random">🎲 Pure Random (Control)</option>
+    </select>
+
+    <button class="btn" id="aiBtn" onclick="runAI()">🤖 วิเคราะห์และทำนาย</button>
+  </div>
+
+  <div id="aiResultCard" class="card" style="display:none">
+    <div class="card-title">💡 ผลการวิเคราะห์</div>
+    <div class="ai-box" id="aiBox"></div>
+    <hr class="sep">
+    <div class="card-title" style="margin-top:4px">📝 บันทึกตัวเลขที่ทำนาย</div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-bottom:8px">แก้ไขได้ก่อนบันทึก</p>
+    <div class="predict-grid" id="predictInputGrid"></div>
+    <button class="btn green-btn" onclick="savePred()" style="margin-top:10px">💾 บันทึกการทำนายนี้</button>
+  </div>
+</div>
+
+<!-- ===== TRACK TAB ===== -->
+<div id="panel-track" class="panel">
+  <div id="scoreArea" style="display:none">
+    <div class="scoreboard">
+      <div class="score-val" id="scoreVal">—</div>
+      <div class="score-sub">accuracy สะสม (ทุกประเภทรวมกัน)</div>
+      <div class="bar-bg"><div class="bar-fill" id="scoreBar" style="width:0%"></div></div>
+      <div class="score-note" id="scoreNote">รอข้อมูล...</div>
+      <div class="score-grid" id="scoreGrid"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📈 Accuracy Trend</div>
+      <div class="chart-container"><canvas id="chartAccuracy"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card" id="verifyCard" style="display:none">
+    <div class="card-title">✅ กรอกผลที่ออกจริง</div>
+    <label>เลือกงวดที่ต้องการตรวจ</label>
+    <select id="verifySelect"></select>
+    <label style="margin-top:10px">รางวัลที่ 1 (6 หลัก)</label>
+    <input type="text" id="v1st" placeholder="เช่น 123456" maxlength="6">
+    <label>เลขหน้า 3 ตัว</label>
+    <input type="text" id="v3f" placeholder="เช่น 456" maxlength="3">
+    <label>เลขท้าย 3 ตัว</label>
+    <input type="text" id="v3b" placeholder="เช่น 789" maxlength="3">
+    <label>เลขท้าย 2 ตัว</label>
+    <input type="text" id="v2" placeholder="เช่น 56" maxlength="2">
+    <button class="btn green-btn" onclick="verifyAndRepredict()">✅ บันทึกผลจริง + ทำนายงวดใหม่อัตโนมัติ</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📋 ประวัติการทำนาย</div>
+    <div id="recList"><div class="empty">ยังไม่มีบันทึก<br>ทำนายงวดแรกในแท็บ "ทำนาย" ได้เลย</div></div>
+  </div>
+</div>
+
+<!-- ===== EXPORT TAB ===== -->
+<div id="panel-export" class="panel">
+  <div class="card">
+    <div class="card-title">📤 ส่งออกข้อมูล</div>
+    <p style="font-size:0.78rem;color:var(--text2);line-height:1.7;margin-bottom:12px">สำรองข้อมูลหรือส่งต่อให้เพื่อน</p>
+
+    <label>ข้อมูลหวยย้อนหลัง</label>
+    <div class="export-area">
+      <textarea id="exportData" readonly style="width:100%"></textarea>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="btn outline" style="flex:1;margin-top:0" onclick="copyExport('exportData')">📋 คัดลอก</button>
+        <button class="btn outline" style="flex:1;margin-top:0" onclick="downloadJSON('data', getData())">💾 JSON</button>
+      </div>
+    </div>
+
+    <label style="margin-top:16px">ประวัติการทำนาย</label>
+    <div class="export-area">
+      <textarea id="exportPreds" readonly style="width:100%"></textarea>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="btn outline" style="flex:1;margin-top:0" onclick="copyExport('exportPreds')">📋 คัดลอก</button>
+        <button class="btn outline" style="flex:1;margin-top:0" onclick="downloadJSON('predictions', getPreds())">💾 JSON</button>
+      </div>
+    </div>
+
+    <button class="btn purple-btn" style="margin-top:16px" onclick="exportPDF()">📄 Export เป็นรายงาน (PNG)</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📥 นำเข้าข้อมูล</div>
+    <label>ข้อมูลหวยย้อนหลัง (JSON)</label>
+    <textarea id="importData" placeholder='วาง JSON ที่นี่...'></textarea>
+    <button class="btn purple-btn" onclick="importJSON('data')">📥 นำเข้าข้อมูลหวย</button>
+
+    <label style="margin-top:14px">ประวัติการทำนาย (JSON)</label>
+    <textarea id="importPreds" placeholder='วาง JSON ที่นี่...'></textarea>
+    <button class="btn purple-btn" onclick="importJSON('preds')">📥 นำเข้าประวัติทำนาย</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔑 API Settings</div>
+    <label>Claude API Key (Optional — สำหรับ AI analysis ที่ดีกว่า)</label>
+    <input type="text" id="apiKeyInput" placeholder="sk-ant-..." style="font-family:'Share Tech Mono',monospace;font-size:0.8rem">
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button class="btn outline" style="flex:1;margin-top:0" onclick="saveApiKey()">💾 บันทึก Key</button>
+      <button class="btn red-btn" style="flex:1;margin-top:0" onclick="clearApiKey()">🗑 ลบ Key</button>
+    </div>
+    <p style="font-size:0.68rem;color:var(--muted);margin-top:6px">Key จะถูกเก็บใน LocalStorage เท่านั้น ส่งไปที่ Anthropic API โดยตรง ไม่ผ่านเซิร์ฟเวอร์อื่น</p>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ========== STATE ==========
+const SK = { data: 'lldata_v4', preds: 'llpreds_v4', theme: 'lltheme', api: 'll_api_key' };
+let chips = { '1st': true, '3f': true, '3b': true, '2': true };
+let charts = {};
+
+function getData() { try { return JSON.parse(localStorage.getItem(SK.data)||'{}'); } catch { return {}; } }
+function getPreds() { try { return JSON.parse(localStorage.getItem(SK.preds)||'[]'); } catch { return []; } }
+function setData(d) { localStorage.setItem(SK.data, JSON.stringify(d)); }
+function setPreds(p) { localStorage.setItem(SK.preds, JSON.stringify(p)); }
+
+// ========== THEME ==========
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  const isLight = document.body.classList.contains('light');
+  localStorage.setItem(SK.theme, isLight ? 'light' : 'dark');
+  document.querySelector('.theme-toggle').textContent = isLight ? '☀️' : '🌙';
+  // Re-render charts with new colors
+  const activeTab = document.querySelector('.tab.active')?.textContent;
+  if (activeTab?.includes('สถิติ')) renderStats();
+  if (activeTab?.includes('Pattern')) renderPatterns();
+  if (activeTab?.includes('บันทึก')) renderTrack();
+}
+(function initTheme() {
+  if (localStorage.getItem(SK.theme) === 'light') {
+    document.body.classList.add('light');
+    document.querySelector('.theme-toggle').textContent = '☀️';
+  }
+})();
+
+// ========== TOAST ==========
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+
+// ========== NAV ==========
+const TABS = ['data','stats','pattern','predict','track','export'];
+function go(t) {
+  document.querySelectorAll('.tab').forEach((el,i) => el.classList.toggle('active', TABS[i] === t));
+  document.querySelectorAll('.panel').forEach((el,i) => el.classList.toggle('active', `panel-${TABS[i]}` === `panel-${t}`));
+  if (t === 'stats') renderStats();
+  if (t === 'pattern') renderPatterns();
+  if (t === 'track') renderTrack();
+  if (t === 'export') renderExport();
+}
+
+// ========== CHART HELPERS ==========
+function getChartColors() {
+  const isLight = document.body.classList.contains('light');
+  return {
+    text: isLight ? '#333' : '#c8cae8',
+    grid: isLight ? '#ddd' : '#2c2d4a',
+    bg: isLight ? '#fff' : '#0e0f1c',
+    gold: isLight ? '#b8860b' : '#e8b84b',
+    red: isLight ? '#d32f2f' : '#ff3d5a',
+    blue: isLight ? '#1565c0' : '#4d9fff',
+    green: isLight ? '#2e7d32' : '#2ecc98',
+    purple: isLight ? '#7b1fa2' : '#a855f7',
+  };
+}
+function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
+
+// ========== DATA ==========
+function saveData() {
+  const p1 = document.getElementById('inp1st').value.trim();
+  const p3 = document.getElementById('inp3').value.trim();
+  const p2 = document.getElementById('inp2').value.trim();
+  const parse1 = p => p.split(/[\n,]+/).map(s=>s.trim()).filter(s=>/^\d{6}$/.test(s));
+  const parse3 = p => p.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  const parse2 = p => p.split(/[\n,]+/).map(s=>s.trim()).filter(s=>/^\d{2}$/.test(s));
+  const d = getData();
+  const merged = {
+    first: [...new Set([...(d.first||[]), ...parse1(p1)])],
+    three: [...new Set([...(d.three||[]), ...parse3(p3)])],
+    two: [...new Set([...(d.two||[]), ...parse2(p2)])],
+    savedAt: new Date().toISOString()
+  };
+  if (!merged.first.length && !merged.three.length && !merged.two.length) { toast('⚠️ กรุณาป้อนข้อมูลอย่างน้อย 1 ประเภท'); return; }
+  setData(merged); updateDataUI(merged); toast(`✅ บันทึกแล้ว! รางวัลที่ 1: ${merged.first.length} งวด`);
+}
+function updateDataUI(d) {
+  const card = document.getElementById('dataLoaded'); const info = document.getElementById('dataLoadedInfo');
+  if (!d || (!d.first?.length && !d.three?.length && !d.two?.length)) { card.style.display='none'; return; }
+  card.style.display = 'block';
+  info.innerHTML = `รางวัลที่ 1 (6 หลัก): <strong style="color:var(--gold)">${d.first?.length||0} งวด</strong><br>เลข 3 ตัว (หน้า/หลัง): <strong style="color:var(--gold)">${d.three?.length||0} งวด</strong><br>เลข 2 ตัว: <strong style="color:var(--gold)">${d.two?.length||0} งวด</strong><br><span style="color:var(--muted);font-size:0.7rem">บันทึกล่าสุด: ${d.savedAt ? new Date(d.savedAt).toLocaleString('th-TH') : '-'}</span>`;
+}
+function clearData() {
+  if (!confirm('ล้างข้อมูลทั้งหมด? ไม่สามารถกู้คืนได้')) return;
+  localStorage.removeItem(SK.data); document.getElementById('dataLoaded').style.display='none';
+  ['inp1st','inp3','inp2'].forEach(id=>document.getElementById(id).value=''); toast('🗑 ล้างข้อมูลแล้ว');
+}
+
+// ========== SAMPLE DATA ==========
+function loadSampleData() {
+  // Real-ish Thai lottery first prize data (100 draws, simulated realistic distribution)
+  const sample1st = [
+    '845693','372158','901426','653782','128940','739261','485037','216594','860315','594872',
+    '137628','950241','628395','471063','305817','892450','746138','213976','580624','369518',
+    '824701','157396','493862','706285','381549','645907','918263','270534','536178','194082',
+    '762351','409683','853217','627049','138576','975420','301895','564732','289361','840157',
+    '516928','723406','398154','651730','174289','930562','467813','825640','293075','501496',
+    '678321','145908','832567','419073','956284','720315','387649','261850','594132','103786',
+    '478295','815063','642517','309846','973120','256483','580971','134628','769352','401597',
+    '895234','627108','341965','578042','203691','756483','189057','432816','965370','812594',
+    '547203','290638','673145','158927','804361','429753','936180','517426','263894','785019',
+    '140567','692381','375904','821673','508249','953710','267438','419856','734092','680513'
+  ];
+  const sample2 = [
+    '47','83','15','62','90','37','54','28','71','06','39','82','50','17','64','93','25','08','41','76',
+    '52','19','86','33','07','94','21','68','45','10','73','58','26','91','04','67','32','85','13','49',
+    '78','20','56','93','41','07','84','35','62','18','90','43','76','29','51','08','64','37','15','82',
+    '96','40','73','28','55','11','87','63','34','09','72','46','19','85','30','57','02','68','41','94',
+    '23','76','50','14','89','31','65','08','42','97','71','36','53','20','84','16','59','03','78','45'
+  ];
+  const d = getData();
+  const merged = {
+    first: [...new Set([...(d.first||[]), ...sample1st])],
+    three: d.three || [],
+    two: [...new Set([...(d.two||[]), ...sample2])],
+    savedAt: new Date().toISOString()
+  };
+  setData(merged); updateDataUI(merged);
+  toast('✅ โหลดข้อมูลตัวอย่าง 100 งวดแล้ว!');
+}
+
+// ========== STATS ==========
+function renderStats() {
+  const d = getData();
+  if (!d.first?.length) { document.getElementById('statsEmpty').style.display='block'; document.getElementById('statsMain').style.display='none'; return; }
+  document.getElementById('statsEmpty').style.display='none'; document.getElementById('statsMain').style.display='block';
+  const c = getChartColors();
+
+  // Digit frequency
+  const freq = Array(10).fill(0);
+  d.first.forEach(n => n.split('').forEach(c => freq[parseInt(c)]++));
+  const total = freq.reduce((a,b)=>a+b,0);
+  const sorted = [...freq.entries()].sort((a,b)=>b[1]-a[1]);
+  const top2 = sorted.slice(0,2).map(x=>x[0]); const bot2 = sorted.slice(-2).map(x=>x[0]);
+
+  const bar = document.getElementById('freqBar'); bar.innerHTML = '';
+  for (let i=0;i<10;i++) {
+    const pct = ((freq[i]/total)*100).toFixed(0); const cls = top2.includes(i)?'hot':bot2.includes(i)?'cold':'';
+    bar.innerHTML += `<div class="digit-box ${cls}"><div class="d">${i}</div><div class="c">${pct}%</div></div>`;
+  }
+
+  // Frequency chart
+  destroyChart('freq');
+  charts.freq = new Chart(document.getElementById('chartFreq'), {
+    type: 'bar', data: {
+      labels: ['0','1','2','3','4','5','6','7','8','9'],
+      datasets: [{ label: 'ความถี่', data: freq, backgroundColor: freq.map((f,i) => top2.includes(i)?c.red:bot2.includes(i)?c.blue:c.gold+'88'), borderColor: freq.map((f,i) => top2.includes(i)?c.red:bot2.includes(i)?c.blue:c.gold), borderWidth: 1 }]
+    }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: c.text }, grid: { color: c.grid } }, x: { ticks: { color: c.text }, grid: { color: c.grid } } } }
+  });
+
+  // Position frequency
+  const posData = []; const posLabels = [];
+  for (let pos=0; pos<6; pos++) {
+    const posFreq = Array(10).fill(0);
+    d.first.forEach(n => { if (n[pos]) posFreq[parseInt(n[pos])]++; });
+    posData.push(posFreq);
+    const maxF = Math.max(...posFreq); const hotD = posFreq.indexOf(maxF);
+    posLabels.push(`ตำแหน่ง ${pos+1} (ออกบ่อย: ${hotD})`);
+  }
+  const posTable = document.getElementById('posFreqTable');
+  posTable.innerHTML = '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px">' +
+    posLabels.map((l,i) => `<div style="text-align:center;background:var(--s3);border-radius:6px;padding:6px 2px"><div style="font-size:0.6rem;color:var(--muted)">Pos ${i+1}</div><div style="font-size:1rem;color:var(--gold2);font-family:'Share Tech Mono',monospace">${l.split(': ')[1]}</div></div>`).join('') + '</div>';
+
+  destroyChart('pos');
+  const posColors = [c.red, c.blue, c.green, c.gold, c.purple, '#ff884d'];
+  charts.pos = new Chart(document.getElementById('chartPos'), {
+    type: 'line', data: {
+      labels: ['0','1','2','3','4','5','6','7','8','9'],
+      datasets: posData.map((pf, i) => ({ label: `Pos ${i+1}`, data: pf, borderColor: posColors[i], backgroundColor: 'transparent', borderWidth: 2, tension: 0.3, pointRadius: 3 }))
+    }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: c.text, font: { size: 10 } } } }, scales: { y: { ticks: { color: c.text }, grid: { color: c.grid } }, x: { ticks: { color: c.text }, grid: { color: c.grid } } } }
+  });
+
+  // 2-digit chart
+  if (d.two?.length) {
+    const twoFreq = {};
+    d.two.forEach(n => { twoFreq[n] = (twoFreq[n]||0)+1; });
+    const sorted2 = Object.entries(twoFreq).sort((a,b)=>b[1]-a[1]).slice(0,15);
+    destroyChart('2dig');
+    charts['2dig'] = new Chart(document.getElementById('chart2dig'), {
+      type: 'bar', data: {
+        labels: sorted2.map(([n])=>n),
+        datasets: [{ label: 'ความถี่', data: sorted2.map(([,c])=>c), backgroundColor: c.gold+'88', borderColor: c.gold, borderWidth: 1 }]
+      }, options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { color: c.text }, grid: { color: c.grid } }, y: { ticks: { color: c.text }, grid: { color: c.grid } } } }
+    });
+  }
+
+  // Cold numbers
+  const coldDig = freq.map((f,i)=>({f,i})).filter(x=>x.f===0).map(x=>x.i);
+  const lowDig = freq.map((f,i)=>({f,i})).sort((a,b)=>a.f-b.f).slice(0,3);
+  document.getElementById('coldNumbers').innerHTML =
+    (coldDig.length ? `ไม่เคยออกเลย: ${coldDig.map(d=>`<span style="color:var(--blue);font-family:'Share Tech Mono',monospace;font-size:1rem;margin:0 4px">${d}</span>`).join('')}` : '<span style="color:var(--green)">ทุกตัวเลขปรากฏอย่างน้อย 1 ครั้ง ✅</span>') +
+    `<br>ออกน้อยสุด: ${lowDig.map(x=>`<span style="color:var(--blue)">${x.i}</span> (${x.f} ครั้ง)`).join(', ')}`;
+
+  // Summary
+  const maxFreq = Math.max(...freq), minFreq = Math.min(...freq);
+  const hotDig = freq.map((f,i)=>({f,i})).filter(x=>x.f===maxFreq).map(x=>x.i);
+  const coldSummary = freq.map((f,i)=>({f,i})).filter(x=>x.f===minFreq).map(x=>x.i);
+  const variance = freq.reduce((s,f) => s + Math.pow(f - total/10, 2), 0) / 10;
+  const stdDev = Math.sqrt(variance);
+  document.getElementById('statsSummary').innerHTML = `
+    งวดที่วิเคราะห์: <strong style="color:var(--gold)">${d.first.length} งวด</strong><br>
+    ตัวออกบ่อยสุด: <strong style="color:var(--red)">${hotDig.join(', ')}</strong> (${maxFreq} ครั้ง)<br>
+    ตัวออกน้อยสุด: <strong style="color:var(--blue)">${coldSummary.join(', ')}</strong> (${minFreq} ครั้ง)<br>
+    ค่าเฉลี่ย: ${(total/10).toFixed(1)} | Std Dev: ${stdDev.toFixed(2)}<br>
+    <span style="font-size:0.7rem;color:var(--muted)">📌 Std Dev ต่ำ = กระจายตัวสม่ำเสมอ (สุ่มดี) | สูง = มี bias</span>
+  `;
+}
+
+// ========== PATTERNS ==========
+function renderPatterns() {
+  const d = getData();
+  if (!d.first?.length) { document.getElementById('patternEmpty').style.display='block'; document.getElementById('patternMain').style.display='none'; return; }
+  document.getElementById('patternEmpty').style.display='none'; document.getElementById('patternMain').style.display='block';
+  const c = getChartColors();
+
+  // Odd/Even
+  const oddEvenData = d.first.map(n => {
+    const digits = n.split('').map(Number);
+    const odd = digits.filter(d => d % 2 === 1).length;
+    return { odd, even: 6 - odd, ratio: `${odd}:${6-odd}` };
+  });
+  const ratioCount = {};
+  oddEvenData.forEach(r => { ratioCount[r.ratio] = (ratioCount[r.ratio]||0)+1; });
+  const ratioSorted = Object.entries(ratioCount).sort((a,b)=>b[1]-a[1]);
+  const avgOdd = (oddEvenData.reduce((s,r)=>s+r.odd,0)/oddEvenData.length).toFixed(1);
+
+  document.getElementById('oddEvenStats').innerHTML = `
+    ค่าเฉลี่ยเลขคี่: <strong style="color:var(--purple)">${avgOdd}</strong> / 6 (คาดหวัง 3.0)<br>
+    อัตราส่วนพบบ่อย: ${ratioSorted.slice(0,3).map(([r,c])=>`<span class="pattern-badge ${r.startsWith('4')||r.startsWith('5')||r.startsWith('6')?'pattern-odd':'pattern-even'}">${r} (${c} ครั้ง)</span>`).join(' ')}
+  `;
+
+  destroyChart('oddEven');
+  charts.oddEven = new Chart(document.getElementById('chartOddEven'), {
+    type: 'bar', data: {
+      labels: ratioSorted.map(([r])=>r),
+      datasets: [{ label: 'จำนวนงวด', data: ratioSorted.map(([,c])=>c), backgroundColor: ratioSorted.map(([r]) => parseInt(r[0])>=4?c.purple+'88':c.blue+'88'), borderColor: ratioSorted.map(([r]) => parseInt(r[0])>=4?c.purple:c.blue), borderWidth: 1 }]
+    }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Odd:Even Ratio Distribution', color: c.text } }, scales: { y: { ticks: { color: c.text }, grid: { color: c.grid } }, x: { ticks: { color: c.text }, grid: { color: c.grid } } } }
+  });
+
+  // Sum range
+  const sums = d.first.map(n => n.split('').reduce((s,d) => s+parseInt(d), 0));
+  const minSum = Math.min(...sums), maxSum = Math.max(...sums);
+  const avgSum = (sums.reduce((a,b)=>a+b,0)/sums.length).toFixed(1);
+  const sumStdDev = Math.sqrt(sums.reduce((s,v) => s+Math.pow(v-avgSum,2),0)/sums.length).toFixed(1);
+
+  // Sum histogram (bins of 5)
+  const binSize = 5;
+  const sumBins = {};
+  sums.forEach(s => { const b = Math.floor(s/binSize)*binSize; sumBins[`${b}-${b+binSize-1}`] = (sumBins[`${b}-${b+binSize-1}`]||0)+1; });
+  const sumBinSorted = Object.entries(sumBins).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  document.getElementById('sumStats').innerHTML = `
+    Min: <strong>${minSum}</strong> | Max: <strong>${maxSum}</strong> | Avg: <strong style="color:var(--gold)">${avgSum}</strong> | StdDev: ${sumStdDev}<br>
+    คาดหวัง (random): ~${(6*4.5).toFixed(1)} (6 ตัว × ค่าเฉลี่ย 4.5)<br>
+    <span class="pattern-badge pattern-sum">ช่วงพบบ่อย: ${sumBinSorted.sort((a,b)=>b[1]-a[1])[0]?.[0] || '-'}</span>
+  `;
+
+  destroyChart('sum');
+  charts.sum = new Chart(document.getElementById('chartSum'), {
+    type: 'bar', data: {
+      labels: sumBinSorted.map(([r])=>r),
+      datasets: [{ label: 'จำนวนงวด', data: sumBinSorted.map(([,c])=>c), backgroundColor: c.gold+'88', borderColor: c.gold, borderWidth: 1 }]
+    }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Sum Distribution (bins of 5)', color: c.text } }, scales: { y: { ticks: { color: c.text }, grid: { color: c.grid } }, x: { ticks: { color: c.text, maxRotation: 45 }, grid: { color: c.grid } } } }
+  });
+
+  // Consecutive digits
+  let consecCount = 0; let consecExamples = [];
+  d.first.forEach(n => {
+    const digits = n.split('').map(Number);
+    for (let i=0; i<digits.length-1; i++) {
+      if (Math.abs(digits[i] - digits[i+1]) === 1) { consecCount++; consecExamples.push(n); break; }
+    }
+  });
+  const consecPct = ((consecCount/d.first.length)*100).toFixed(1);
+  document.getElementById('consecStats').innerHTML = `
+    งวดที่มีเลขเรียงติดกัน: <strong style="color:var(--gold)">${consecCount}/${d.first.length}</strong> (${consecPct}%)<br>
+    คาดหวัง (random): ~${((1 - Math.pow(8/10, 5)) * d.first.length).toFixed(0)} งวด<br>
+    ${consecExamples.slice(0,5).map(n=>`<code style="color:var(--gold2)">${n}</code>`).join(', ')}${consecExamples.length>5?' ...':''}
+  `;
+
+  // Repeating digits
+  let repeatCount = 0; let doubleCount = 0; let tripleCount = 0;
+  d.first.forEach(n => {
+    const digits = n.split('');
+    const counts = {};
+    digits.forEach(d => { counts[d] = (counts[d]||0)+1; });
+    const maxRepeat = Math.max(...Object.values(counts));
+    if (maxRepeat >= 3) { tripleCount++; repeatCount++; }
+    else if (maxRepeat >= 2) { doubleCount++; repeatCount++; }
+  });
+  document.getElementById('repeatStats').innerHTML = `
+    เลขซ้ำ 2 ตัวขึ้นไป: <strong>${repeatCount}/${d.first.length}</strong> (${((repeatCount/d.first.length)*100).toFixed(1)}%)<br>
+    <span class="pattern-badge pattern-odd">มีเลขซ้ำ 2 ตัว: ${doubleCount}</span>
+    <span class="pattern-badge pattern-even">มีเลขซ้ำ 3+ ตัว: ${tripleCount}</span><br>
+    คาดหวังเลขซ้ำ (random): ~${((1 - (9*8*7*6*5)/(Math.pow(10,5)))*d.first.length).toFixed(0)} งวด
+  `;
+
+  // Bigram (digit pair)
+  const bigrams = {};
+  d.first.forEach(n => {
+    for (let i=0; i<n.length-1; i++) { const pair = n[i]+n[i+1]; bigrams[pair] = (bigrams[pair]||0)+1; }
+  });
+  const bigramSorted = Object.entries(bigrams).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  destroyChart('bigram');
+  charts.bigram = new Chart(document.getElementById('chartBigram'), {
+    type: 'bar', data: {
+      labels: bigramSorted.map(([n])=>n),
+      datasets: [{ label: 'ความถี่', data: bigramSorted.map(([,c])=>c), backgroundColor: c.green+'88', borderColor: c.green, borderWidth: 1 }]
+    }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: c.text }, grid: { color: c.grid } }, x: { ticks: { color: c.text }, grid: { color: c.grid } } } }
+  });
+
+  // Chi-Square test
+  const freq = Array(10).fill(0);
+  d.first.forEach(n => n.split('').forEach(d => freq[parseInt(d)]++));
+  const totalDigits = freq.reduce((a,b)=>a+b,0);
+  const expected = totalDigits / 10;
+  const chiSq = freq.reduce((s, f) => s + Math.pow(f - expected, 2) / expected, 0);
+  // df = 9, critical value at 0.05 = 16.919
+  const df = 9;
+  const pApprox = chiSq > 21.666 ? '< 0.01' : chiSq > 16.919 ? '< 0.05' : chiSq > 14.684 ? '< 0.10' : '> 0.10';
+  const isSignificant = chiSq > 16.919;
+
+  document.getElementById('chiSquareResult').innerHTML = `
+    <strong>χ² = ${chiSq.toFixed(4)}</strong> (df = ${df})<br>
+    p-value ≈ ${pApprox}<br>
+    ${isSignificant
+      ? `<span style="color:var(--red)">⚠️ มีนัยสำคัญทางสถิติ (p < 0.05) — อาจมี bias ในการกระจายตัวเลข</span>`
+      : `<span style="color:var(--green)">✅ ไม่มีนัยสำคัญทางสถิติ — การกระจายตัวเลขสอดคล้องกับ random (p ≥ 0.05)</span>`}<br>
+    <span style="font-size:0.7rem;color:var(--muted)">📌 ถ้า ω² > 16.92 (α=0.05) → ปฏิเสธ H₀ (ว่าตัวเลขกระจายเท่ากัน)</span>
+  `;
+
+  // Streak info
+  let maxStreak = 0; let maxStreakDigit = 0; let currentStreaks = {};
+  d.first.forEach(n => {
+    const digitCounts = {};
+    n.split('').forEach(d => { digitCounts[d] = (digitCounts[d]||0)+1; });
+    const maxC = Math.max(...Object.values(digitCounts));
+    const maxD = Object.keys(digitCounts).find(k => digitCounts[k]===maxC);
+    if (maxC > maxStreak) { maxStreak = maxC; maxStreakDigit = maxD; }
+  });
+  document.getElementById('streakInfo').innerHTML = `
+    ตัวเลขที่ซ้ำมากที่สุดในงวดเดียว: <strong style="color:var(--red)">${maxStreakDigit}</strong> ปรากฏ <strong>${maxStreak}</strong> ครั้ง<br>
+    <span style="font-size:0.7rem;color:var(--muted)">เช่น รางวัลที่ 1 = 112233 → มี 1,2,3 ซ้ำ 2 ครั้ง</span>
+  `;
+}
+
+// ========== CHIPS ==========
+function toggleChip(k) { chips[k] = !chips[k]; document.getElementById('chip-'+k).classList.toggle('active', chips[k]); }
+
+// ========== PREDICT ==========
+function generatePrediction(method, data, selected) {
+  const d = data;
+  const typeConf = { '1st': 6, '3f': 3, '3b': 3, '2': 2 };
+  const freq = Array(10).fill(1);
+  if (d.first?.length) d.first.forEach(n => n.split('').forEach(c => freq[parseInt(c)]++));
+  const total = freq.reduce((a,b)=>a+b,0);
+  const result = {};
+
+  selected.forEach(k => {
+    const len = typeConf[k]; if (!len) return;
+    let num = '';
+
+    if (method === 'weighted') {
+      for (let i=0; i<len; i++) {
+        let r = Math.random() * total;
+        for (let j=0; j<10; j++) { r -= freq[j]; if (r <= 0) { num += j; break; } }
+      }
+    } else if (method === 'hotcold') {
+      const sorted = [...freq.entries()].sort((a,b)=>b[1]-a[1]);
+      const hot = sorted.slice(0,5).map(x=>x[0]); const cold = sorted.slice(5).map(x=>x[0]);
+      for (let i=0; i<len; i++) {
+        num += Math.random() < 0.6 ? hot[Math.floor(Math.random()*hot.length)] : cold[Math.floor(Math.random()*cold.length)];
+      }
+    } else if (method === 'streak') {
+      // Use position-specific frequency
+      for (let pos=0; pos<len; pos++) {
+        const posFreq = Array(10).fill(1);
+        if (d.first?.length) d.first.forEach(n => { if (n[pos]) posFreq[parseInt(n[pos])]++; });
+        const posTotal = posFreq.reduce((a,b)=>a+b,0);
+        let r = Math.random() * posTotal;
+        for (let j=0; j<10; j++) { r -= posFreq[j]; if (r <= 0) { num += j; break; } }
+      }
+    } else { // random
+      for (let i=0; i<len; i++) num += Math.floor(Math.random()*10);
+    }
+    result[k] = num;
+  });
+  return result;
+}
+
+async function runAI() {
+  const d = getData();
+  const drawDate = document.getElementById('nextDrawDate').value.trim();
+  const selected = Object.entries(chips).filter(([,v])=>v).map(([k])=>k);
+  const method = document.getElementById('predictMethod').value;
+  if (!selected.length) { toast('⚠️ กรุณาเลือกประเภทอย่างน้อย 1 อย่าง'); return; }
+
+  const btn = document.getElementById('aiBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>กำลังวิเคราะห์...';
+  const box = document.getElementById('aiBox');
+  box.style.display='block'; box.textContent = 'กำลังประมวลผล...';
+  document.getElementById('aiResultCard').style.display='block';
+
+  const typeLabels = {'1st':'รางวัลที่ 1','3f':'หน้า 3 ตัว','3b':'ท้าย 3 ตัว','2':'ท้าย 2 ตัว'};
+
+  if (method === 'ai') {
+    const apiKey = localStorage.getItem(SK.api);
+    if (!apiKey) {
+      box.textContent = '⚠️ ไม่ได้ตั้งค่า API Key\nกำลังใช้ Local Statistical Analysis แทน...\n';
+      const preds = generatePrediction('weighted', d, selected);
+      let analysis = '\n📊 ผลวิเคราะห์ Local:\n';
+      selected.forEach(k => { analysis += `  ${typeLabels[k]}: ${preds[k]}\n`; });
+      analysis += '\n⚠️ ตั้งค่า API Key ในแท็บ ส่งออก เพื่อใช้ AI จริง';
+      box.textContent = analysis;
+      buildPredictFields(selected, analysis, preds);
+    } else {
+      try {
+        const dataStr = [
+          d.first?.length ? `รางวัลที่ 1 (${d.first.length} งวด): ${d.first.slice(0,80).join(', ')}` : '',
+          d.two?.length ? `เลข 2 ตัว (${d.two.length} งวด): ${d.two.slice(0,80).join(', ')}` : ''
+        ].filter(Boolean).join('\n');
+
+        const wantTypes = selected.map(k=>typeLabels[k]).join(', ');
+        const prompt = `คุณเป็นนักวิเคราะห์สถิติหวยไทย วิเคราะห์ข้อมูลต่อไปนี้เชิงวิทยาศาสตร์:
+
+${dataStr || '(ไม่มีข้อมูล)'}
+
+งวดที่จะทำนาย: ${drawDate || 'งวดถัดไป'}
+ประเภท: ${wantTypes}
+
+วิเคราะห์:
+1. ความถี่ตัวเลขที่ออกบ่อย/น้อย
+2. Pattern ที่น่าสนใจ (odd/even, sum, consecutive)
+3. ให้ผลทำนาย 1 ชุดสำหรับแต่ละประเภท
+4. ระบุ probability ทางคณิตศาสตร์
+5. ย้ำว่านี่เป็นการทดลอง ไม่ใช่การรับประกัน
+
+จบด้วย:
+- รางวัลที่ 1: XXXXXX
+- เลขหน้า 3 ตัว: XXX
+- เลขท้าย 3 ตัว: XXX
+- เลขท้าย 2 ตัว: XX`;
+
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1200, messages: [{ role: "user", content: prompt }] })
+        });
+        if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        const text = data.content?.map(c=>c.text||'').join('') || 'ไม่ได้รับคำตอบ';
+        box.textContent = text;
+
+        // Extract predictions
+        const extracted = {};
+        const patterns = { '1st': /รางวัลที่\s*1[:\s]+(\d{6})/, '3f': /หน้า\s*3\s*ตัว[:\s]+(\d{3})/, '3b': /ท้าย\s*3\s*ตัว[:\s]+(\d{3})/, '2': /ท้าย\s*2\s*ตัว[:\s]+(\d{2})/ };
+        selected.forEach(k => { const m = text.match(patterns[k]); if (m) extracted[k] = m[1]; });
+        buildPredictFields(selected, text, extracted);
+      } catch(e) {
+        box.textContent = `❌ API Error: ${e.message}\n\nกำลังใช้ Local Analysis แทน...`;
+        const preds = generatePrediction('weighted', d, selected);
+        let fallback = '\n📊 Local Fallback:\n';
+        selected.forEach(k => { fallback += `  ${typeLabels[k]}: ${preds[k]}\n`; });
+        box.textContent += fallback;
+        buildPredictFields(selected, fallback, preds);
+      }
+    }
+  } else {
+    const preds = generatePrediction(method, d, selected);
+    const methodNames = { weighted: '📊 Weighted Frequency', hotcold: '🔥 Hot/Cold Mix', streak: '📈 Streak-based', random: '🎲 Pure Random' };
+    let analysis = `${methodNames[method]} Analysis\n\n`;
+    if (d.first?.length) {
+      const freq = Array(10).fill(0); d.first.forEach(n => n.split('').forEach(c => freq[parseInt(c)]++));
+      const sorted = [...freq.entries()].sort((a,b)=>b[1]-a[1]);
+      analysis += `Top 3: ${sorted.slice(0,3).map(([d,f])=>`${d}(${f}x)`).join(', ')}\n`;
+      analysis += `Bottom 3: ${sorted.slice(-3).map(([d,f])=>`${d}(${f}x)`).join(', ')}\n\n`;
+    }
+    analysis += 'ผลทำนาย:\n';
+    selected.forEach(k => { analysis += `  ${typeLabels[k]}: ${preds[k]}\n`; });
+    analysis += '\n⚠️ นี่เป็นการสุ่มถ่วงน้ำหนัก ไม่ใช่การทำนายจริง';
+    box.textContent = analysis;
+    buildPredictFields(selected, analysis, preds);
+  }
+  btn.disabled=false; btn.innerHTML='🤖 วิเคราะห์และทำนาย';
+}
+
+function buildPredictFields(selected, text, extracted) {
+  const grid = document.getElementById('predictInputGrid'); grid.innerHTML = '';
+  const typeConf = [
+    { key:'1st', label:'รางวัลที่ 1', placeholder:'6 หลัก', max:6, pattern:/รางวัลที่\s*1[:\s]+(\d{6})/ },
+    { key:'3f', label:'หน้า 3 ตัว', placeholder:'3 หลัก', max:3, pattern:/หน้า\s*3\s*ตัว[:\s]+(\d{3})/ },
+    { key:'3b', label:'ท้าย 3 ตัว', placeholder:'3 หลัก', max:3, pattern:/ท้าย\s*3\s*ตัว[:\s]+(\d{3})/ },
+    { key:'2', label:'ท้าย 2 ตัว', placeholder:'2 หลัก', max:2, pattern:/ท้าย\s*2\s*ตัว[:\s]+(\d{2})/ }
+  ];
+  selected.forEach(k => {
+    const conf = typeConf.find(c=>c.key===k); if (!conf) return;
+    const auto = extracted?.[k] || text.match(conf.pattern)?.[1] || '';
+    grid.innerHTML += `<div class="predict-cell"><div class="ptype">${conf.label}</div><input type="text" id="pi-${k}" value="${auto}" placeholder="${conf.placeholder}" maxlength="${conf.max}" style="margin-top:4px;font-size:0.85rem;text-align:center;font-family:'Share Tech Mono',monospace"></div>`;
+  });
+}
+
+function savePred() {
+  const draw = document.getElementById('nextDrawDate').value.trim() || 'ไม่ระบุ';
+  const method = document.getElementById('predictMethod').value;
+  const selected = Object.entries(chips).filter(([,v])=>v).map(([k])=>k);
+  const pred = {}; let hasAny = false;
+  selected.forEach(k => { const el = document.getElementById('pi-'+k); if (el && el.value.trim()) { pred[k] = el.value.trim(); hasAny = true; } });
+  if (!hasAny) { toast('⚠️ กรุณาใส่ตัวเลขที่ทำนายอย่างน้อย 1 ประเภท'); return; }
+  const preds = getPreds();
+  preds.push({ id: Date.now(), draw, pred, method, actual: null, savedAt: new Date().toLocaleDateString('th-TH') });
+  setPreds(preds); toast(`💾 บันทึกแล้ว! งวด: ${draw}`);
+  document.getElementById('aiResultCard').style.display='none';
+  document.getElementById('aiBox').style.display='none';
+  document.getElementById('nextDrawDate').value='';
+}
+
+// ========== TRACK ==========
+function renderTrack() {
+  const preds = getPreds();
+  const recList = document.getElementById('recList');
+  const verifyCard = document.getElementById('verifyCard');
+  const scoreArea = document.getElementById('scoreArea');
+
+  if (!preds.length) {
+    recList.innerHTML = '<div class="empty">ยังไม่มีบันทึก<br>ไปแท็บ "ทำนาย" เพื่อเริ่มต้น</div>';
+    verifyCard.style.display='none'; scoreArea.style.display='none'; return;
+  }
+
+  const done = preds.filter(p=>p.actual);
+  if (done.length) {
+    scoreArea.style.display='block';
+    let total=0, hits=0;
+    const byType = {'1st':{h:0,t:0},'3f':{h:0,t:0},'3b':{h:0,t:0},'2':{h:0,t:0}};
+    done.forEach(p => {
+      Object.keys(p.pred||{}).forEach(k => {
+        total++; byType[k].t++;
+        if (p.actual[k] && p.actual[k] === p.pred[k]) { hits++; byType[k].h++; }
+      });
+    });
+    const pct = total ? ((hits/total)*100).toFixed(1) : 0;
+    document.getElementById('scoreVal').textContent = pct + '%';
+    document.getElementById('scoreBar').style.width = Math.min(pct,100)+'%';
+    document.getElementById('scoreNote').textContent = `ถูก ${hits}/${total} รายการ | ${done.length} งวดที่ตรวจแล้ว | Random ~0.0001%`;
+
+    const typeLabels = {'1st':'รางวัลที่ 1','3f':'หน้า 3 ตัว','3b':'ท้าย 3 ตัว','2':'ท้าย 2 ตัว'};
+    document.getElementById('scoreGrid').innerHTML = Object.entries(byType).filter(([,v])=>v.t>0).map(([k,v])=>`
+      <div class="score-cell"><div class="sv" style="color:${v.h>0?'var(--green)':'var(--red)'}">${v.h}/${v.t}</div><div class="sl">${typeLabels[k]}</div></div>`).join('');
+
+    // Accuracy trend chart
+    const c = getChartColors();
+    destroyChart('accuracy');
+    const cumHits = []; const cumTotal = []; let ch=0, ct=0;
+    done.forEach(p => {
+      Object.keys(p.pred||{}).forEach(k => { ct++; if (p.actual[k]===p.pred[k]) ch++; });
+      cumHits.push(ch); cumTotal.push(ct);
+    });
+    charts.accuracy = new Chart(document.getElementById('chartAccuracy'), {
+      type: 'line', data: {
+        labels: done.map((_,i) => `#${i+1}`),
+        datasets: [
+          { label: 'Cumulative Accuracy %', data: cumTotal.map((t,i) => ((cumHits[i]/t)*100).toFixed(1)), borderColor: c.green, backgroundColor: c.green+'22', fill: true, tension: 0.3, yAxisID: 'y' },
+          { label: 'Expected Random %', data: done.map(() => 0.0001), borderColor: c.red, borderDash: [5,5], pointRadius: 0, yAxisID: 'y' }
+        ]
+      }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: c.text } } }, scales: { y: { ticks: { color: c.text, callback: v=>v+'%' }, grid: { color: c.grid }, min: 0 }, x: { ticks: { color: c.text }, grid: { color: c.grid } } } }
+    });
+  } else { scoreArea.style.display='none'; }
+
+  const pending = preds.filter(p=>!p.actual);
+  if (pending.length) {
+    verifyCard.style.display='block';
+    document.getElementById('verifySelect').innerHTML = pending.map(p=>`<option value="${p.id}">งวด ${p.draw} (${Object.keys(p.pred).join(', ')}) [${p.method||'-'}]</option>`).join('');
+  } else { verifyCard.style.display='none'; }
+
+  const typeLabels = {'1st':'รางวัลที่ 1','3f':'หน้า 3','3b':'ท้าย 3','2':'ท้าย 2'};
+  const methodEmoji = { ai:'🤖', weighted:'📊', hotcold:'🔥', streak:'📈', random:'🎲' };
+  recList.innerHTML = preds.slice().reverse().map(p => {
+    const status = !p.actual ? 'pending' : Object.keys(p.pred).every(k=>p.actual[k]===p.pred[k]) ? 'hit' : 'miss';
+    const label = {pending:'⏳ รอผล',hit:'✅ ถูก!',miss:'❌ ผิด'}[status];
+    const cells = Object.entries(p.pred).map(([k,v]) => {
+      const act = p.actual?.[k]; const match = act && act===v;
+      return `<div class="rec-type ${act?(match?'matched':'wrong'):''}"><div class="type-label">${typeLabels[k]}</div><div class="type-num">${v}</div>${act?`<div class="type-actual">${act}</div>`:''}</div>`;
+    }).join('');
+    return `<div class="rec"><div class="rec-header"><div class="rec-draw">${methodEmoji[p.method]||''} งวด ${p.draw} &nbsp;|&nbsp; ${p.savedAt}</div><span class="badge ${status}">${label}</span></div><div class="rec-grid">${cells}</div></div>`;
+  }).join('');
+}
+
+async function verifyAndRepredict() {
+  const id = parseInt(document.getElementById('verifySelect').value);
+  const actual = { '1st': document.getElementById('v1st').value.trim(), '3f': document.getElementById('v3f').value.trim(), '3b': document.getElementById('v3b').value.trim(), '2': document.getElementById('v2').value.trim() };
+  Object.keys(actual).forEach(k=>{ if (!actual[k]) delete actual[k]; });
+  if (!Object.keys(actual).length) { toast('⚠️ กรุณากรอกผลจริงอย่างน้อย 1 ประเภท'); return; }
+  const preds = getPreds(); const rec = preds.find(p=>p.id===id); if (!rec) return;
+  rec.actual = actual; setPreds(preds);
+  const d = getData();
+  if (actual['1st'] && /^\d{6}$/.test(actual['1st']) && !d.first?.includes(actual['1st'])) { d.first = d.first||[]; d.first.unshift(actual['1st']); }
+  if (actual['2'] && /^\d{2}$/.test(actual['2']) && !d.two?.includes(actual['2'])) { d.two = d.two||[]; d.two.unshift(actual['2']); }
+  if (actual['3f'] || actual['3b']) { const e = [actual['3f'],actual['3b']].filter(Boolean).join(','); d.three = d.three||[]; if (!d.three.includes(e)) d.three.unshift(e); }
+  d.savedAt = new Date().toISOString(); setData(d);
+  ['v1st','v3f','v3b','v2'].forEach(id=>{ document.getElementById(id).value=''; }); renderTrack();
+  toast('✅ บันทึกผลจริงแล้ว!'); setTimeout(() => go('predict'), 800);
+}
+
+// ========== EXPORT ==========
+function renderExport() {
+  document.getElementById('exportData').value = JSON.stringify(getData(), null, 2);
+  document.getElementById('exportPreds').value = JSON.stringify(getPreds(), null, 2);
+  const key = localStorage.getItem(SK.api);
+  if (key) document.getElementById('apiKeyInput').value = key;
+}
+function copyExport(id) { const el = document.getElementById(id); el.select(); navigator.clipboard.writeText(el.value).then(() => toast('📋 คัดลอกแล้ว!')); }
+function downloadJSON(name, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = `lottery-lab-${name}-${new Date().toISOString().slice(0,10)}.json`; a.click();
+  URL.revokeObjectURL(url); toast('💾 ดาวน์โหลดแล้ว!');
+}
+function importJSON(type) {
+  const el = document.getElementById(type === 'data' ? 'importData' : 'importPreds');
+  try {
+    const parsed = JSON.parse(el.value.trim());
+    if (type === 'data') { setData({...parsed, savedAt: new Date().toISOString()}); updateDataUI(parsed); }
+    else { setPreds(Array.isArray(parsed) ? parsed : []); }
+    toast('✅ นำเข้าสำเร็จ!'); el.value = '';
+  } catch(e) { toast('❌ JSON ไม่ถูกต้อง: ' + e.message); }
+}
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) { toast('⚠️ กรุณาใส่ API Key'); return; }
+  localStorage.setItem(SK.api, key); toast('✅ บันทึก API Key แล้ว!');
+}
+function clearApiKey() {
+  if (!confirm('ลบ API Key?')) return;
+  localStorage.removeItem(SK.api); document.getElementById('apiKeyInput').value=''; toast('🗑 ลบ API Key แล้ว');
+}
+
+async function exportPDF() {
+  toast('📸 กำลังสร้างรายงาน...');
+  try {
+    const wrap = document.querySelector('.wrap');
+    const canvas = await html2canvas(wrap, { backgroundColor: getComputedStyle(document.body).getPropertyValue('--bg').trim(), scale: 2 });
+    const link = document.createElement('a');
+    link.download = `lottery-lab-report-${new Date().toISOString().slice(0,10)}.png`;
+    link.href = canvas.toDataURL();
+    link.click();
+    toast('✅ ดาวน์โหลดรายงานแล้ว!');
+  } catch(e) { toast('❌ Error: ' + e.message); }
+}
+
+// ========== INIT ==========
+(function init() {
+  // Migrate from old versions
+  ['lldata_v3','lldata_v2','lldata'].forEach(k => { if (localStorage.getItem(k) && !localStorage.getItem(SK.data)) { setData(JSON.parse(localStorage.getItem(k))); }});
+  ['llpreds_v3','llpreds_v2','llpreds'].forEach(k => { if (localStorage.getItem(k) && !localStorage.getItem(SK.preds)) { setPreds(JSON.parse(localStorage.getItem(k))); }});
+  const d = getData();
+  if (d.first?.length || d.three?.length || d.two?.length) updateDataUI(d);
+})();
+</script>
+</body>
+</html>
